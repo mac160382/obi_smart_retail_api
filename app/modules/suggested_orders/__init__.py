@@ -1,0 +1,1 @@
+"""Suggested order calculation module."""

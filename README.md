@@ -1,0 +1,386 @@
+# FastAPI + PostgreSQL: monolito modular para ventas históricas de lácteos
+
+El proyecto carga archivos CSV en:
+
+```text
+public.lacteos_ventas_historicas
+```
+
+La tabla de negocio respeta esta estructura:
+
+```sql
+CREATE TABLE IF NOT EXISTS public.lacteos_ventas_historicas
+(
+    fecha date,
+    item character varying(50),
+    descripcion_item text,
+    location integer,
+    descripcion_tienda character varying(150),
+    tipo_centro character varying(100),
+    qty_vendida numeric(14,2)
+);
+```
+
+## Decisión de diseño
+
+La tabla no tiene clave primaria. Para no modificar su contrato, se define con
+SQLAlchemy Core en `app/modules/imports/models.py`. Las tablas técnicas `users`
+e `import_jobs` sí se manejan con ORM.
+
+## Inicio
+
+```bash
+cp .env.example .env
+python -m venv .venv
+```
+
+Windows:
+
+```powershell
+.venv\Scripts\activate
+pip install -e ".[dev]"
+docker compose up -d db
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+## Docker completo
+
+```bash
+docker compose up --build
+```
+
+## Registrar usuario
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/register   -H "Content-Type: application/json"   -d '{"username":"admin","email":"admin@example.com","password":"Password123"}'
+```
+
+## Login
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/login   -H "Content-Type: application/x-www-form-urlencoded"   -d "username=admin&password=Password123"
+```
+
+## Cargar ventas históricas
+
+El campo `mode` es obligatorio y admite:
+
+- `incremental`: agrega los registros y, después del `commit`, programa el mock
+  de feature engineering con las filas válidas recibidas.
+- `replace`: elimina los registros actuales y carga los nuevos dentro de una
+  sola transacción. No ejecuta feature engineering.
+
+Carga incremental:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/imports/historical-sales/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@sample_lacteos_ventas_historicas.csv"   -F "mode=incremental"
+```
+
+Reemplazo completo:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/imports/historical-sales/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@sample_lacteos_ventas_historicas.csv"   -F "mode=replace"
+```
+
+## Columnas CSV
+
+El encabezado debe contener exactamente:
+
+```text
+fecha,item,descripcion_item,location,descripcion_tienda,tipo_centro,qty_vendida
+```
+
+Formatos:
+
+- `fecha`: `YYYY-MM-DD` o `DD/MM/YYYY`.
+- `item`: máximo 50 caracteres.
+- `location`: entero.
+- `descripcion_tienda`: máximo 150 caracteres.
+- `tipo_centro`: máximo 100 caracteres.
+- `qty_vendida`: decimal compatible con `NUMERIC(14,2)`.
+- Todos los campos de la tabla permiten valores vacíos, que se convierten a `NULL`.
+
+## Cargar promociones vigentes
+
+Este endpoint reemplaza de forma atómica todos los registros de
+`public.g2_lacteos_promociones_vigentes`:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/imports/current-promotions/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@promociones.csv"
+```
+
+El encabezado debe contener exactamente:
+
+```text
+item,item_desc,event_code,event_name,promo_mechanic,status,inicio,fin,desc_pct,price_reg,price_promo,uplift_esperado,dias_restantes
+```
+
+`inicio` y `fin` admiten `YYYY-MM-DD` o `DD/MM/YYYY`. `desc_pct` y
+`uplift_esperado` admiten un máximo de cuatro decimales. Si cualquier fila es
+inválida, se rechaza todo el archivo y los registros existentes no se modifican.
+
+La vista `public.vst_promociones_vigentes` resume las promociones agrupando por
+`item`, `item_desc`, `promo_mechanic` y `status`, y obtiene los valores máximos
+de `inicio`, `fin` y `uplift_esperado`. La vista no define un orden; las consultas
+que necesiten ordenamiento deben usar:
+
+```sql
+SELECT *
+FROM public.vst_promociones_vigentes
+ORDER BY item;
+```
+
+## Cargar maestro de inventario
+
+Este endpoint reemplaza de forma atómica todos los registros de
+`public.g2_maestro_inventario_lacteos`:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/imports/inventory-master/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@inventario.csv"
+```
+
+El encabezado debe contener exactamente:
+
+```text
+item_code,description_item_code,proveedor_code,description_proveedor,macrofamily_code,description_macrofamily_code,familia_code,description_familia,description_subagrupacion,location_code,description_location_code,item_type,estado_articulo,temporal_freeattr5,control_type,estado_planificacion,logistic_class_code,abc_cadena,service_level,frecuencia_pedido,minimum_handling_quantity_units,lead_time_days,review_period_days,current_stock_units,expected_demand_qty_period_direct_sales_units_day,cobertura,on_order_in_transit_units,extra_visibilidad_units,item_birth_day_date,overstock_units,cantidad_ultimo_ingreso,fecha_ultimo_ingreso
+```
+
+Las columnas numéricas admiten un máximo de cuatro decimales y las fechas
+aceptan `YYYY-MM-DD` o `DD/MM/YYYY`. Si cualquier fila es inválida, se rechaza
+todo el archivo y los registros existentes no se modifican.
+
+## Cargar maestro de artículos
+
+Este endpoint reemplaza de forma atómica todos los registros de
+`public.lacteos_maestro_items`:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/imports/items-master/csv \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN" \
+  -F "file=@maestro_items.csv"
+```
+
+El encabezado debe contener exactamente:
+
+```text
+item,descripcion,itemtype,desc_itemtype,munit,unitcost,listprice,servclas,desc_servclas,vida_util,division_cod,division_desc,macrofam_cod,macrofam_desc,familia_cod,familia_desc,subfamilia_cod,subfamilia_desc,cod_jerarq_nivel3,des_jerar_nivel3,cod_jerarq_nivel4,des_jerar_nivel4,cod_jerarq_nivel5,des_jerar_nivel5,cod_jerarq_nivel6,des_jerar_nivel6
+```
+
+Todos los campos permiten valores vacíos, que se convierten a `NULL`.
+`unitcost` y `listprice` admiten cuatro decimales; `vida_util`, dos; y los
+códigos jerárquicos de nivel 3 a 6 deben ser enteros compatibles con
+`NUMERIC(14,0)`. Si cualquier fila es inválida, se rechaza todo el archivo y
+los registros existentes no se modifican.
+
+## Cargar maestro de tiendas
+
+Este endpoint reemplaza de forma atómica todos los registros de
+`public.lacteos_maestro_tiendas`:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/imports/stores-master/csv \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN" \
+  -F "file=@maestro_tiendas.csv"
+```
+
+El encabezado debe contener exactamente:
+
+```text
+location,descripcion,tipo_centro,region,estado,sociedad
+```
+
+`location`, `estado` y `sociedad` deben ser enteros. Todos los campos permiten
+valores vacíos, que se convierten a `NULL`. Si cualquier fila es inválida, se
+rechaza todo el archivo y los registros existentes no se modifican.
+
+## Cargar pronósticos
+
+Este endpoint reemplaza de forma atómica todos los registros de
+`public.pronostico`:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/imports/forecast/csv \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN" \
+  -F "file=@Pronostico_template.csv"
+```
+
+El encabezado debe contener exactamente:
+
+```text
+forecast_origin,target_date,horizon_day,descripcion_item,item,item_code,descripcion_tienda,location,location_code,forecast_qty_vendida,raw_prediction,was_clipped_to_zero,unknown_item,unknown_location,history_days,model_key,model_name,model_cutoff,generated_utc
+```
+
+`forecast_origin`, `target_date` y `model_cutoff` utilizan fechas ISO
+`YYYY-MM-DD`. `generated_utc` utiliza fecha-hora ISO 8601 con zona horaria. Las
+banderas booleanas aceptan `True`, `False`, `1` o `0`; las predicciones se
+almacenan como `double precision`. Si cualquier fila es inválida, se rechaza
+todo el archivo y los datos existentes no se modifican.
+
+La carga reemplaza únicamente los registros de `public.pronostico`. No ejecuta
+el cálculo de pedidos sugeridos ni modifica `public.pedido_sugerido`; ese proceso
+permanece separado en `/api/v1/suggested-orders/recalculate`.
+
+## Tabla de pedido sugerido
+
+Las migraciones crean `public.pedido_sugerido` con las siguientes columnas,
+todas obligatorias y sin llave primaria:
+
+```text
+item,forecast_origin,horizon_day,target_date,location,descripcion_tienda,descripcion_item,descripcion_proveedor,prediccion,ajustado,lead_time_days,review_period_days,uplift_esperado,minimum_handling_quantity_units,current_stock_units,on_order_in_transit_units,sugerido,status
+```
+
+`descripcion_item` utiliza `varchar(60)` y `descripcion_proveedor`, `varchar(67)`,
+de acuerdo con las longitudes de las columnas fuente. `prediccion` utiliza
+`double precision`; `ajustado` utiliza el mismo tipo y permite `NULL`;
+`uplift_esperado`, `numeric(18,4)`; y las cantidades, periodos y `sugerido`
+utilizan `integer`. `status` admite `Estimado`, `Planificado` y `Aprobado`, con
+`Estimado` como valor predeterminado. `forecast_origin` y `target_date` utilizan
+`date`, y `horizon_day`, `integer`; las tres columnas son obligatorias.
+
+## Calcular pedido sugerido
+
+Este endpoint reemplaza de forma atómica los registros de
+`public.pedido_sugerido` con el resultado calculado en PostgreSQL:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/suggested-orders/recalculate \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN"
+```
+
+El procedimiento parte del inventario y relaciona el pronóstico mediante `item`
+y `location`. Cuando no existe un pronóstico coincidente, utiliza la fecha máxima
+de `forecast_origin`, asigna `1` a `horizon_day` y usa esa misma fecha como
+`target_date`. Las promociones se relacionan por artículo. La fórmula es:
+
+```text
+CEIL(prediccion * (1 - uplift_esperado) - minimum_handling_quantity_units
+     - current_stock_units - on_order_in_transit_units)
+```
+
+Los valores de texto nulos se sustituyen por una cadena vacía y los valores
+numéricos nulos por cero. El borrado y la inserción se ejecutan en una sola
+transacción; un error revierte ambos cambios y conserva el resultado anterior.
+Cada recálculo obtiene `descripcion_item` de `description_item_code`,
+`descripcion_proveedor` de la columna homónima del inventario e inicializa
+`status` en `Estimado`. Como `ajustado` no forma parte del cálculo, queda en
+`NULL` después de cada reemplazo.
+
+Una respuesta exitosa utiliza `200 OK`:
+
+```json
+{
+  "operation": "replace",
+  "destination": "public.pedido_sugerido",
+  "status": "completed",
+  "deleted_rows": 0,
+  "inserted_rows": 64562,
+  "calculated_at": "2026-07-18T15:30:45.123Z",
+  "duration_ms": 842
+}
+```
+
+Para consultar los pedidos de una ubicación se utiliza el endpoint paginado:
+
+```bash
+curl "http://localhost:8000/api/v1/suggested-orders?location=13&page=1&page_size=50" \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN"
+```
+
+`location` es obligatorio. La consulta devuelve solamente registros con
+`horizon_day = 1`; este filtro se aplica también al total paginado. `page` inicia
+en `1` y `page_size` admite valores de `1` a `200`. Los resultados se ordenan por
+`item` y `descripcion_tienda`:
+
+```json
+{
+  "location": 13,
+  "page": 1,
+  "page_size": 50,
+  "total_items": 245,
+  "total_pages": 5,
+  "items": [
+    {
+      "item": "ITEM001",
+      "forecast_origin": "2026-06-23",
+      "horizon_day": 1,
+      "target_date": "2026-06-24",
+      "location": 13,
+      "descripcion_tienda": "Tienda 13",
+      "descripcion_item": "Descripción del producto",
+      "descripcion_proveedor": "Descripción del proveedor",
+      "prediccion": 25.5,
+      "ajustado": null,
+      "lead_time_days": 2,
+      "review_period_days": 7,
+      "uplift_esperado": 0.15,
+      "minimum_handling_quantity_units": 5,
+      "current_stock_units": 10,
+      "on_order_in_transit_units": 3,
+      "sugerido": 22,
+      "status": "Estimado"
+    }
+  ]
+}
+```
+
+## Catálogo de ubicaciones
+
+El catálogo autenticado de ubicaciones se obtiene directamente del maestro de
+inventario:
+
+```bash
+curl "http://localhost:8000/api/v1/catalogs/locations" \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN"
+```
+
+La consulta elimina combinaciones duplicadas, ignora códigos de ubicación nulos
+o vacíos, normaliza espacios laterales y ordena por descripción y código:
+
+```json
+[
+  {
+    "location": "13",
+    "descripcion_tienda": "Tienda Centro"
+  }
+]
+```
+
+## Migración y propietario
+
+La migración inicial crea todas las tablas en `public` y asigna el propietario
+de las tablas de negocio. Las migraciones incrementales conservan los datos:
+
+```sql
+ALTER TABLE public.lacteos_ventas_historicas
+OWNER TO smartadmin;
+ALTER TABLE public.g2_lacteos_promociones_vigentes
+OWNER TO smartadmin;
+ALTER TABLE public.g2_maestro_inventario_lacteos
+OWNER TO smartadmin;
+ALTER TABLE public.lacteos_maestro_items
+OWNER TO smartadmin;
+ALTER TABLE public.lacteos_maestro_tiendas
+OWNER TO smartadmin;
+ALTER TABLE public.pronostico
+OWNER TO smartadmin;
+ALTER TABLE public.pedido_sugerido
+OWNER TO smartadmin;
+ALTER VIEW public.vst_promociones_vigentes
+OWNER TO smartadmin;
+```
+
+El usuario utilizado para ejecutar Alembic debe ser `smartadmin`, un superusuario
+o un rol con permiso para reasignar el propietario.
+
+## Archivos grandes
+
+La inserción actual se ejecuta en lotes configurables mediante:
+
+```env
+CSV_BATCH_SIZE=1000
+```
+
+Para volúmenes de cientos de miles o millones de filas, se recomienda reemplazar
+la implementación del repositorio por PostgreSQL `COPY`, sin modificar el router
+ni el servicio.
