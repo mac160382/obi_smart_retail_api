@@ -44,10 +44,92 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-## Docker completo
+## Ejecutar API y PostgreSQL con Docker
+
+### Requisitos
+
+- Docker Desktop o Docker Engine con Docker Compose v2.
+- Puertos `8000` y `5432` disponibles.
+
+### 1. Crear la configuración local
+
+Desde la raíz del proyecto, copiar el archivo de ejemplo:
+
+Linux o macOS:
 
 ```bash
-docker compose up --build
+cp .env.example .env
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Antes de compartir o desplegar el proyecto, reemplazar `JWT_SECRET_KEY` y las
+credenciales de PostgreSQL por valores seguros. No subir `.env` al repositorio.
+
+### 2. Construir e iniciar los servicios
+
+```bash
+docker compose up -d --build
+```
+
+Este comando inicia:
+
+- PostgreSQL en `localhost:5432`.
+- La API en `http://localhost:8000`.
+- Las migraciones de Alembic mediante `alembic upgrade head` antes de iniciar
+  Uvicorn.
+
+### 3. Verificar el estado
+
+```bash
+docker compose ps
+curl http://localhost:8000/health
+```
+
+La respuesta esperada del health check es:
+
+```json
+{"status":"ok"}
+```
+
+La documentación OpenAPI está disponible en
+`http://localhost:8000/docs` cuando `APP_ENV` no es `production`.
+
+### Consultar logs
+
+```bash
+docker compose logs -f api
+docker compose logs -f db
+```
+
+### Reconstruir solamente la API
+
+```bash
+docker compose up -d --build api
+```
+
+### Conectarse a PostgreSQL desde el contenedor
+
+```bash
+docker compose exec db psql -U smartadmin -d smart_retail
+```
+
+### Detener el proyecto
+
+Conservar los datos de PostgreSQL:
+
+```bash
+docker compose down
+```
+
+Eliminar también el volumen y todos los datos:
+
+```bash
+docker compose down -v
 ```
 
 ## Registrar usuario
