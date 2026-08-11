@@ -1,7 +1,7 @@
 import csv
 import io
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -120,7 +120,10 @@ def optional_decimal(value: str) -> Decimal | None:
     return decimal_value
 
 
-async def parse_csv(upload: UploadFile) -> ParsedCSV:
+async def parse_csv(
+    upload: UploadFile,
+    expected_date: date,
+) -> ParsedCSV:
     filename = Path(upload.filename or "").name
 
     if not filename.lower().endswith(".csv"):
@@ -171,6 +174,7 @@ async def parse_csv(upload: UploadFile) -> ParsedCSV:
 
     rows: list[dict] = []
     errors: list[dict] = []
+    date_errors: list[dict] = []
 
     for row_number, raw_row in enumerate(reader, start=2):
         row = {
@@ -180,9 +184,33 @@ async def parse_csv(upload: UploadFile) -> ParsedCSV:
         }
 
         try:
+            row_date = optional_date(row["fecha"])
+        except CSVValidationError as exc:
+            date_errors.append(
+                {
+                    "row": row_number,
+                    "error": str(exc),
+                }
+            )
+            continue
+
+        if row_date != expected_date:
+            received_date = row_date.isoformat() if row_date else "vacía"
+            date_errors.append(
+                {
+                    "row": row_number,
+                    "error": (
+                        f"fecha {received_date}; se esperaba "
+                        f"{expected_date.isoformat()}"
+                    ),
+                }
+            )
+            continue
+
+        try:
             rows.append(
                 {
-                    "fecha": optional_date(row["fecha"]),
+                    "fecha": row_date,
                     "item": optional_text(row["item"], 50),
                     "descripcion_item": optional_text(row["descripcion_item"]),
                     "location": optional_integer(row["location"]),
@@ -200,6 +228,17 @@ async def parse_csv(upload: UploadFile) -> ParsedCSV:
                     "error": str(exc),
                 }
             )
+
+    if date_errors:
+        invalid_rows = ", ".join(
+            str(error["row"])
+            for error in date_errors[:20]
+        )
+        raise CSVValidationError(
+            "La columna fecha debe coincidir en todas las filas con el "
+            f"parámetro fecha={expected_date.isoformat()}. "
+            f"Filas inválidas: {invalid_rows}"
+        )
 
     if not rows:
         raise CSVValidationError(

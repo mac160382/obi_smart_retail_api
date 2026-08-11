@@ -180,7 +180,12 @@ curl -X POST http://localhost:8000/api/v1/auth/login   -H "Content-Type: applica
 
 ## Cargar ventas históricas
 
-El campo `mode` es obligatorio y admite:
+Los campos `mode` y `fecha` son obligatorios. `fecha` utiliza el formato
+`YYYY-MM-DD` y debe coincidir con la columna `fecha` de todas las filas del CSV.
+Si alguna fecha es diferente, vacía o inválida, se rechaza el archivo completo
+con `422 Unprocessable Entity` y no se modifica la información existente.
+
+`mode` admite:
 
 - `incremental`: agrega los registros y, después del `commit`, programa el mock
   de feature engineering con las filas válidas recibidas.
@@ -190,13 +195,13 @@ El campo `mode` es obligatorio y admite:
 Carga incremental:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/imports/historical-sales/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@sample_lacteos_ventas_historicas.csv"   -F "mode=incremental"
+curl -X POST http://localhost:8000/api/v1/imports/historical-sales/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@sample_lacteos_ventas_historicas.csv"   -F "mode=incremental"   -F "fecha=2026-08-10"
 ```
 
 Reemplazo completo:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/imports/historical-sales/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@sample_lacteos_ventas_historicas.csv"   -F "mode=replace"
+curl -X POST http://localhost:8000/api/v1/imports/historical-sales/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@sample_lacteos_ventas_historicas.csv"   -F "mode=replace"   -F "fecha=2026-08-10"
 ```
 
 ## Columnas CSV

@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 
 from fastapi import (
@@ -41,9 +42,18 @@ async def upload_historical_sales_csv(
         ImportMode,
         Form(description="Modo de carga: incremental o reemplazo completo"),
     ],
+    fecha: Annotated[
+        date,
+        Form(description="Fecha que debe coincidir con la columna fecha del CSV"),
+    ],
 ) -> ImportResponse:
     try:
-        result = await ImportService(db).import_csv(user_id, file, mode)
+        result = await ImportService(db).import_csv(
+            user_id,
+            file,
+            mode,
+            fecha,
+        )
         job = result.job
 
         if result.feature_engineering_rows is not None:

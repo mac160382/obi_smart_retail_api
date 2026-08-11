@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID
 
 from fastapi import UploadFile
@@ -34,8 +34,9 @@ class ImportService:
         user_id: UUID,
         upload: UploadFile,
         mode: ImportMode,
+        expected_date: date,
     ) -> ImportResult:
-        parsed = await parse_csv(upload)
+        parsed = await parse_csv(upload, expected_date)
 
         job = ImportJob(
             user_id=user_id,

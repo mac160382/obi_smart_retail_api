@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -11,12 +12,14 @@ from app.modules.imports.router import upload_historical_sales_csv
 from app.modules.imports.schemas import ImportMode
 from app.modules.imports.service import ImportResult, ImportService
 
+EXPECTED_DATE = date(2026, 8, 10)
+
 
 def make_parsed_csv() -> ParsedCSV:
     return ParsedCSV(
         filename="ventas.csv",
         columns=["fecha", "item"],
-        rows=[{"fecha": None, "item": "A"}],
+        rows=[{"fecha": EXPECTED_DATE, "item": "A"}],
         rejected_rows=0,
         errors=[],
     )
@@ -52,7 +55,12 @@ def test_incremental_commits_and_returns_rows_for_feature_engineering() -> None:
         new=AsyncMock(return_value=parsed),
     ):
         result = asyncio.run(
-            service.import_csv(uuid4(), MagicMock(), ImportMode.INCREMENTAL)
+            service.import_csv(
+                uuid4(),
+                MagicMock(),
+                ImportMode.INCREMENTAL,
+                EXPECTED_DATE,
+            )
         )
 
     assert events == ["insert", "commit"]
@@ -78,7 +86,12 @@ def test_replace_deletes_then_inserts_in_same_transaction() -> None:
         new=AsyncMock(return_value=make_parsed_csv()),
     ):
         result = asyncio.run(
-            service.import_csv(uuid4(), MagicMock(), ImportMode.REPLACE)
+            service.import_csv(
+                uuid4(),
+                MagicMock(),
+                ImportMode.REPLACE,
+                EXPECTED_DATE,
+            )
         )
 
     assert events == ["delete", "insert", "commit"]
@@ -86,7 +99,7 @@ def test_replace_deletes_then_inserts_in_same_transaction() -> None:
 
 
 def test_incremental_endpoint_schedules_mock_with_csv_rows() -> None:
-    rows = [{"fecha": None, "item": "A"}]
+    rows = [{"fecha": EXPECTED_DATE, "item": "A"}]
     result = ImportResult(
         job=make_job(),
         mode=ImportMode.INCREMENTAL,
@@ -105,6 +118,7 @@ def test_incremental_endpoint_schedules_mock_with_csv_rows() -> None:
                 background_tasks=background_tasks,
                 file=upload,
                 mode=ImportMode.INCREMENTAL,
+                fecha=EXPECTED_DATE,
             )
         )
 
@@ -133,6 +147,7 @@ def test_replace_endpoint_does_not_schedule_feature_engineering() -> None:
                 background_tasks=background_tasks,
                 file=upload,
                 mode=ImportMode.REPLACE,
+                fecha=EXPECTED_DATE,
             )
         )
 
