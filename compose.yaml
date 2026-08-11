@@ -15,16 +15,39 @@ services:
       timeout: 5s
       retries: 10
 
+  rabbitmq:
+    image: rabbitmq:4.3.4-management-alpine
+    hostname: smart-retail-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?RABBITMQ_USER is required}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VIRTUAL_HOST:-smart_retail}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
   api:
     build: .
     env_file:
       - .env
     environment:
       DATABASE_URL: postgresql+psycopg://smartadmin:change-me@db:5432/smart_retail
+      RABBITMQ_HOST: rabbitmq
     ports:
       - "8000:8000"
     depends_on:
       db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     command: >
       sh -c "alembic upgrade head &&
@@ -32,3 +55,4 @@ services:
 
 volumes:
   postgres_data:
+  rabbitmq_data:

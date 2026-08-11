@@ -6,11 +6,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
+from app.infrastructure.messaging import create_rabbitmq_publisher
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
-    yield
+async def lifespan(app: FastAPI):
+    publisher = create_rabbitmq_publisher()
+    await publisher.connect()
+    app.state.rabbitmq_publisher = publisher
+    try:
+        yield
+    finally:
+        await publisher.close()
 
 
 def create_app() -> FastAPI:

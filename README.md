@@ -79,6 +79,8 @@ docker compose up -d --build
 Este comando inicia:
 
 - PostgreSQL en `localhost:5432`.
+- RabbitMQ en `localhost:5672` y su consola de administración en
+  `http://localhost:15672`.
 - La API en `http://localhost:8000`.
 - Las migraciones de Alembic mediante `alembic upgrade head` antes de iniciar
   Uvicorn.
@@ -104,6 +106,7 @@ La documentación OpenAPI está disponible en
 ```bash
 docker compose logs -f api
 docker compose logs -f db
+docker compose logs -f rabbitmq
 ```
 
 ### Reconstruir solamente la API
@@ -131,6 +134,37 @@ Eliminar también el volumen y todos los datos:
 ```bash
 docker compose down -v
 ```
+
+## RabbitMQ
+
+Docker crea un broker RabbitMQ `4.3.4-management-alpine` independiente con:
+
+- Vhost: `smart_retail`.
+- Exchange durable tipo `topic`: `smart_retail.events`.
+- Volumen persistente: `rabbitmq_data`.
+- Health check mediante `rabbitmq-diagnostics`.
+
+Al iniciar, FastAPI establece una conexión robusta y declara el exchange. Esta
+inicialización no publica mensajes.
+
+El usuario, la contraseña, el vhost y el exchange se configuran en `.env` con
+las variables `RABBITMQ_USER`, `RABBITMQ_PASSWORD`,
+`RABBITMQ_VIRTUAL_HOST` y `RABBITMQ_EXCHANGE`. Las credenciales de ejemplo deben
+reemplazarse antes de utilizar el proyecto fuera de un entorno local.
+
+La consola se abre en `http://localhost:15672`. Para verificar el broker desde
+el contenedor:
+
+```bash
+docker compose exec rabbitmq rabbitmq-diagnostics -q ping
+docker compose exec rabbitmq rabbitmqctl list_vhosts
+docker compose exec rabbitmq rabbitmqctl list_exchanges -p smart_retail name type durable
+```
+
+La API incluye un publicador reutilizable con mensajes JSON persistentes,
+publisher confirms y conexión robusta. Por el momento ningún endpoint ni proceso
+lo invoca y no se crean colas; las colas y routing keys se definirán junto con
+los futuros consumidores.
 
 ## Registrar usuario
 

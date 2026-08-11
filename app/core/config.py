@@ -35,6 +35,13 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = []
 
+    rabbitmq_host: str = "localhost"
+    rabbitmq_port: int = Field(default=5672, ge=1, le=65_535)
+    rabbitmq_user: str = Field(min_length=1)
+    rabbitmq_password: str = Field(min_length=12)
+    rabbitmq_virtual_host: str = "smart_retail"
+    rabbitmq_exchange: str = "smart_retail.events"
+
     max_upload_size_mb: int = 20
     csv_encoding: str = "utf-8-sig"
     csv_delimiter: str = ","
