@@ -161,10 +161,9 @@ docker compose exec rabbitmq rabbitmqctl list_vhosts
 docker compose exec rabbitmq rabbitmqctl list_exchanges -p smart_retail name type durable
 ```
 
-La API incluye un publicador reutilizable con mensajes JSON persistentes,
-publisher confirms y conexión robusta. Por el momento ningún endpoint ni proceso
-lo invoca y no se crean colas; las colas y routing keys se definirán junto con
-los futuros consumidores.
+La API incluye un publicador con mensajes JSON persistentes, publisher confirms
+y conexión robusta. Al iniciar declara la cola durable `jaimito` y la enlaza al
+exchange con la routing key `historical_sales.imported`.
 
 ## Registrar usuario
 
@@ -180,10 +179,27 @@ curl -X POST http://localhost:8000/api/v1/auth/login   -H "Content-Type: applica
 
 ## Cargar ventas históricas
 
-Los campos `mode` y `fecha` son obligatorios. `fecha` utiliza el formato
-`YYYY-MM-DD` y debe coincidir con la columna `fecha` de todas las filas del CSV.
-Si alguna fecha es diferente, vacía o inválida, se rechaza el archivo completo
-con `422 Unprocessable Entity` y no se modifica la información existente.
+El campo `mode` es obligatorio. `publish_message` es opcional y utiliza `false`
+como valor predeterminado. Cuando `publish_message=true`, `fecha` se vuelve
+obligatoria, utiliza el formato `YYYY-MM-DD` y debe coincidir con la columna
+`fecha` de todas las filas del CSV. Si alguna fecha es diferente, vacía o
+inválida, se rechaza el archivo completo con `422 Unprocessable Entity` y no se
+modifica la información existente.
+
+Cuando `publish_message=false`, `fecha` puede omitirse y no se realiza la
+comparación entre el parámetro y las fechas del CSV. Cuando es `true`, después
+del commit se publica en `jaimito` un evento `historical_sales.imported` que
+incluye `fecha`, `mode`, nombre del archivo, conteos y tabla destino.
+
+La respuesta incluye `message_publication_status`, con uno de estos valores:
+
+- `not_requested`: no se solicitó publicación.
+- `published`: RabbitMQ confirmó el mensaje.
+- `failed`: la carga quedó confirmada en PostgreSQL, pero RabbitMQ no confirmó
+  el mensaje dentro del tiempo configurado.
+
+El identificador `message_event_id` coincide con el identificador del trabajo de
+importación para facilitar la deduplicación en los consumidores.
 
 `mode` admite:
 
@@ -195,13 +211,13 @@ con `422 Unprocessable Entity` y no se modifica la información existente.
 Carga incremental:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/imports/historical-sales/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@sample_lacteos_ventas_historicas.csv"   -F "mode=incremental"   -F "fecha=2026-08-10"
+curl -X POST http://localhost:8000/api/v1/imports/historical-sales/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@sample_lacteos_ventas_historicas.csv"   -F "mode=incremental"   -F "publish_message=false"
 ```
 
 Reemplazo completo:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/imports/historical-sales/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@sample_lacteos_ventas_historicas.csv"   -F "mode=replace"   -F "fecha=2026-08-10"
+curl -X POST http://localhost:8000/api/v1/imports/historical-sales/csv   -H "Authorization: Bearer REEMPLAZAR_TOKEN"   -F "file=@sample_lacteos_ventas_historicas.csv"   -F "mode=replace"   -F "publish_message=true"   -F "fecha=2026-08-10"
 ```
 
 ## Columnas CSV

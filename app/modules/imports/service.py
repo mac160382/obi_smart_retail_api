@@ -6,7 +6,7 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.modules.imports.csv_parser import parse_csv
+from app.modules.imports.csv_parser import CSVValidationError, parse_csv
 from app.modules.imports.forecast_csv_parser import parse_forecast_csv
 from app.modules.imports.inventory_csv_parser import parse_inventory_master_csv
 from app.modules.imports.items_csv_parser import parse_items_master_csv
@@ -22,6 +22,8 @@ class ImportResult:
     job: ImportJob
     mode: ImportMode
     feature_engineering_rows: list[dict] | None
+    publish_message: bool = False
+    event_date: date | None = None
 
 
 class ImportService:
@@ -34,9 +36,19 @@ class ImportService:
         user_id: UUID,
         upload: UploadFile,
         mode: ImportMode,
-        expected_date: date,
+        expected_date: date | None,
+        publish_message: bool = False,
     ) -> ImportResult:
-        parsed = await parse_csv(upload, expected_date)
+        if publish_message and expected_date is None:
+            raise CSVValidationError(
+                "El parámetro fecha es obligatorio cuando "
+                "publish_message=true"
+            )
+
+        parsed = await parse_csv(
+            upload,
+            expected_date if publish_message else None,
+        )
 
         job = ImportJob(
             user_id=user_id,
@@ -78,6 +90,8 @@ class ImportService:
                     if mode is ImportMode.INCREMENTAL
                     else None
                 ),
+                publish_message=publish_message,
+                event_date=expected_date if publish_message else None,
             )
 
         except Exception as exc:

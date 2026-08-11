@@ -10,6 +10,7 @@ from aio_pika.abc import (
     AbstractExchange,
     AbstractRobustChannel,
     AbstractRobustConnection,
+    AbstractRobustQueue,
 )
 
 from app.core.config import settings
@@ -61,6 +62,8 @@ class RabbitMQPublisher:
         password: str,
         virtual_host: str,
         exchange_name: str,
+        queue_name: str,
+        routing_key: str,
     ) -> None:
         self.host = host
         self.port = port
@@ -68,9 +71,12 @@ class RabbitMQPublisher:
         self.password = password
         self.virtual_host = virtual_host
         self.exchange_name = exchange_name
+        self.queue_name = queue_name
+        self.routing_key = routing_key
         self._connection: AbstractRobustConnection | None = None
         self._channel: AbstractRobustChannel | None = None
         self._exchange: AbstractExchange | None = None
+        self._queue: AbstractRobustQueue | None = None
 
     async def connect(self) -> None:
         if self._connection is not None and not self._connection.is_closed:
@@ -91,6 +97,14 @@ class RabbitMQPublisher:
             self.exchange_name,
             ExchangeType.TOPIC,
             durable=True,
+        )
+        self._queue = await self._channel.declare_queue(
+            self.queue_name,
+            durable=True,
+        )
+        await self._queue.bind(
+            self._exchange,
+            routing_key=self.routing_key,
         )
 
     async def publish(
@@ -125,6 +139,7 @@ class RabbitMQPublisher:
         self._connection = None
         self._channel = None
         self._exchange = None
+        self._queue = None
 
 
 def create_rabbitmq_publisher() -> RabbitMQPublisher:
@@ -135,4 +150,6 @@ def create_rabbitmq_publisher() -> RabbitMQPublisher:
         password=settings.rabbitmq_password,
         virtual_host=settings.rabbitmq_virtual_host,
         exchange_name=settings.rabbitmq_exchange,
+        queue_name=settings.rabbitmq_queue,
+        routing_key=settings.rabbitmq_historical_sales_routing_key,
     )

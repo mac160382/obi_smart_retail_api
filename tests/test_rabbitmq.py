@@ -19,6 +19,8 @@ def make_publisher() -> RabbitMQPublisher:
         password="test-password",
         virtual_host="smart_retail",
         exchange_name="smart_retail.events",
+        queue_name="jaimito",
+        routing_key="historical_sales.imported",
     )
 
 
@@ -52,6 +54,9 @@ def test_publisher_declares_durable_exchange_and_publishes_persistent_message(
     exchange.publish = AsyncMock()
     channel = MagicMock()
     channel.declare_exchange = AsyncMock(return_value=exchange)
+    queue = MagicMock()
+    queue.bind = AsyncMock()
+    channel.declare_queue = AsyncMock(return_value=queue)
     connection = MagicMock()
     connection.is_closed = False
     connection.channel = AsyncMock(return_value=channel)
@@ -78,6 +83,11 @@ def test_publisher_declares_durable_exchange_and_publishes_persistent_message(
         on_return_raises=True,
     )
     channel.declare_exchange.assert_awaited_once()
+    channel.declare_queue.assert_awaited_once_with("jaimito", durable=True)
+    queue.bind.assert_awaited_once_with(
+        exchange,
+        routing_key="historical_sales.imported",
+    )
     message = exchange.publish.await_args.args[0]
     assert message.delivery_mode == DeliveryMode.PERSISTENT
     assert message.message_id == str(event.event_id)

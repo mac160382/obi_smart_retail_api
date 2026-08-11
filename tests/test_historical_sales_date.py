@@ -32,6 +32,17 @@ def test_historical_sales_accepts_rows_matching_form_date() -> None:
     assert parsed.rows[0]["fecha"] == EXPECTED_DATE
 
 
+def test_historical_sales_does_not_compare_dates_without_expected_date() -> None:
+    upload = make_upload(
+        "2026-08-09,ITEM-1,Producto,13,Tienda,Supermercado,12.50\n"
+    )
+
+    parsed = asyncio.run(parse_csv(upload))
+
+    assert len(parsed.rows) == 1
+    assert parsed.rows[0]["fecha"] == date(2026, 8, 9)
+
+
 @pytest.mark.parametrize(
     "csv_date",
     ["2026-08-09", "", "fecha-invalida"],

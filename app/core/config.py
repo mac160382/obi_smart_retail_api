@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     rabbitmq_password: str = Field(min_length=12)
     rabbitmq_virtual_host: str = "smart_retail"
     rabbitmq_exchange: str = "smart_retail.events"
+    rabbitmq_queue: str = "jaimito"
+    rabbitmq_historical_sales_routing_key: str = "historical_sales.imported"
+    rabbitmq_publish_timeout_seconds: float = Field(default=10, gt=0, le=60)
 
     max_upload_size_mb: int = 20
     csv_encoding: str = "utf-8-sig"

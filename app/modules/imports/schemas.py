@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -21,6 +22,13 @@ class ImportResponse(BaseModel):
     validation_errors: list[dict]
     mode: ImportMode
     feature_engineering_status: str
+    publish_message: bool
+    message_publication_status: Literal[
+        "not_requested",
+        "published",
+        "failed",
+    ]
+    message_event_id: UUID | None = None
 
 
 class ReplaceImportResponse(BaseModel):

@@ -122,7 +122,7 @@ def optional_decimal(value: str) -> Decimal | None:
 
 async def parse_csv(
     upload: UploadFile,
-    expected_date: date,
+    expected_date: date | None = None,
 ) -> ParsedCSV:
     filename = Path(upload.filename or "").name
 
@@ -186,15 +186,17 @@ async def parse_csv(
         try:
             row_date = optional_date(row["fecha"])
         except CSVValidationError as exc:
-            date_errors.append(
-                {
-                    "row": row_number,
-                    "error": str(exc),
-                }
-            )
+            error = {
+                "row": row_number,
+                "error": str(exc),
+            }
+            if expected_date is not None:
+                date_errors.append(error)
+            else:
+                errors.append(error)
             continue
 
-        if row_date != expected_date:
+        if expected_date is not None and row_date != expected_date:
             received_date = row_date.isoformat() if row_date else "vacía"
             date_errors.append(
                 {
@@ -229,7 +231,7 @@ async def parse_csv(
                 }
             )
 
-    if date_errors:
+    if expected_date is not None and date_errors:
         invalid_rows = ", ".join(
             str(error["row"])
             for error in date_errors[:20]
