@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.db.base import Base
 from app.modules.auth.models import User
 from app.modules.imports.models import ImportJob
+from app.modules.suggested_orders.events import SuggestedOrderEvent
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

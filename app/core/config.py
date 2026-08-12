@@ -43,7 +43,13 @@ class Settings(BaseSettings):
     rabbitmq_exchange: str = "smart_retail.events"
     rabbitmq_queue: str = "jaimito"
     rabbitmq_historical_sales_routing_key: str = "historical_sales.imported"
+    rabbitmq_forecast_loaded_queue: str = "smart_retail.forecast.loaded"
+    rabbitmq_forecast_loaded_routing_key: str = "forecast.loaded"
     rabbitmq_publish_timeout_seconds: float = Field(default=10, gt=0, le=60)
+
+    sse_heartbeat_seconds: int = Field(default=15, ge=5, le=60)
+    sse_client_queue_size: int = Field(default=100, ge=1, le=1000)
+    sse_replay_limit: int = Field(default=1000, ge=1, le=10_000)
 
     max_upload_size_mb: int = 20
     csv_encoding: str = "utf-8-sig"

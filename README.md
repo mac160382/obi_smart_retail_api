@@ -165,6 +165,17 @@ La API incluye un publicador con mensajes JSON persistentes, publisher confirms
 y conexión robusta. Al iniciar declara la cola durable `jaimito` y la enlaza al
 exchange con la routing key `historical_sales.imported`.
 
+La API tambien declara y consume la cola durable
+`smart_retail.forecast.loaded`, enlazada al mismo exchange con la routing key
+`forecast.loaded`. El evento debe usar el sobre JSON de eventos de la API,
+tener `event_type=forecast.loaded`, `event_version=1`, un `event_id` UUID y ser
+un mensaje persistente. Cuando se recibe correctamente, el consumidor ejecuta
+el mismo servicio interno utilizado por
+`POST /api/v1/suggested-orders/recalculate`; no realiza una llamada HTTP al
+propio API. El mensaje se confirma manualmente solamente despues del commit del
+recalculo. Un evento invalido se rechaza, una ejecucion concurrente se reencola
+y un error inesperado se reintenta una vez.
+
 ## Registrar usuario
 
 ```bash

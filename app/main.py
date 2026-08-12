@@ -6,17 +6,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.exception_handlers import register_exception_handlers
-from app.infrastructure.messaging import create_rabbitmq_publisher
+from app.infrastructure.messaging import (
+    create_forecast_loaded_consumer,
+    create_rabbitmq_publisher,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     publisher = create_rabbitmq_publisher()
+    forecast_consumer = create_forecast_loaded_consumer()
     await publisher.connect()
+    await forecast_consumer.connect()
     app.state.rabbitmq_publisher = publisher
+    app.state.rabbitmq_forecast_consumer = forecast_consumer
     try:
         yield
     finally:
+        await forecast_consumer.close()
         await publisher.close()
 
 

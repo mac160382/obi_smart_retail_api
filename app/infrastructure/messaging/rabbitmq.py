@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -29,7 +29,7 @@ class EventMessage:
     event_version: int = 1
     event_id: UUID = field(default_factory=uuid4)
     occurred_at: datetime = field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=lambda: datetime.now(UTC)
     )
     correlation_id: str | None = None
 
