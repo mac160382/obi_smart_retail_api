@@ -176,6 +176,48 @@ propio API. El mensaje se confirma manualmente solamente despues del commit del
 recalculo. Un evento invalido se rechaza, una ejecucion concurrente se reencola
 y un error inesperado se reintenta una vez.
 
+### Eventos SSE de pedido sugerido
+
+Una vez confirmado el recÃ¡lculo originado por `forecast.loaded`, la API guarda
+la notificaciÃ³n en PostgreSQL y la transmite por:
+
+```text
+GET /api/v1/suggested-orders/events
+```
+
+El endpoint requiere el mismo token OAuth2 Bearer que el resto de la API y
+responde como `text/event-stream`. El token no debe enviarse en la URL. Como
+`EventSource` nativo no permite establecer `Authorization`, el frontend React
+debe utilizar `fetch` con streaming o una biblioteca SSE que acepte encabezados:
+
+```javascript
+const response = await fetch(
+  "http://localhost:8000/api/v1/suggested-orders/events",
+  {
+    headers: {
+      Accept: "text/event-stream",
+      Authorization: `Bearer ${accessToken}`,
+    },
+  },
+);
+```
+
+Para probar la conexiÃ³n desde una terminal:
+
+```bash
+curl -N http://localhost:8000/api/v1/suggested-orders/events \
+  -H "Accept: text/event-stream" \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN"
+```
+
+El evento emitido se llama `suggested-orders.recalculated` e incluye el estado,
+identificador del evento `forecast.loaded`, `forecast_origin`, filas eliminadas
+e insertadas, duraciÃ³n y fecha del cÃ¡lculo. `forecast_origin` debe llegar en
+`data` del evento `forecast.loaded` con formato `YYYY-MM-DD`; si falta o es
+invÃ¡lido, el mensaje se rechaza sin ejecutar el recÃ¡lculo. La API envÃ­a
+keep-alives, cierra la conexiÃ³n al expirar el JWT y acepta `Last-Event-ID` para
+recuperar eventos persistidos tras una desconexiÃ³n.
+
 ## Registrar usuario
 
 ```bash

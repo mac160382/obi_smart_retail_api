@@ -1,5 +1,7 @@
 import asyncio
 import json
+from datetime import date
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -16,6 +18,8 @@ from app.modules.suggested_orders.repository import (
 
 
 def make_consumer() -> RabbitMQForecastLoadedConsumer:
+    broker = MagicMock()
+    broker.publish = AsyncMock()
     return RabbitMQForecastLoadedConsumer(
         host="rabbitmq",
         port=5672,
@@ -25,6 +29,7 @@ def make_consumer() -> RabbitMQForecastLoadedConsumer:
         exchange_name="smart_retail.events",
         queue_name="smart_retail.forecast.loaded",
         routing_key="forecast.loaded",
+        sse_broker=broker,
     )
 
 
@@ -85,12 +90,21 @@ def test_consumer_declares_durable_queue_and_manual_ack(
 
 def test_consumer_acknowledges_only_after_success() -> None:
     consumer = make_consumer()
-    consumer._recalculate = MagicMock()
+    notification = MagicMock()
+    consumer._recalculate = MagicMock(
+        return_value=SimpleNamespace(notification=notification)
+    )
     message = make_message()
 
     asyncio.run(consumer._handle_message(message))
 
     consumer._recalculate.assert_called_once()
+    assert consumer._recalculate.call_args.args[0].forecast_origin == date(
+        2026,
+        8,
+        11,
+    )
+    consumer.sse_broker.publish.assert_awaited_once_with(notification)
     message.ack.assert_awaited_once_with()
     message.nack.assert_not_awaited()
     message.reject.assert_not_awaited()
@@ -101,6 +115,21 @@ def test_consumer_rejects_invalid_or_non_persistent_event() -> None:
     consumer._recalculate = MagicMock()
     message = make_message()
     message.delivery_mode = DeliveryMode.NOT_PERSISTENT
+
+    asyncio.run(consumer._handle_message(message))
+
+    consumer._recalculate.assert_not_called()
+    message.reject.assert_awaited_once_with(requeue=False)
+    message.ack.assert_not_awaited()
+
+
+def test_consumer_rejects_event_without_forecast_origin() -> None:
+    consumer = make_consumer()
+    consumer._recalculate = MagicMock()
+    message = make_message()
+    payload = json.loads(message.body)
+    payload["data"] = {}
+    message.body = json.dumps(payload).encode()
 
     asyncio.run(consumer._handle_message(message))
 

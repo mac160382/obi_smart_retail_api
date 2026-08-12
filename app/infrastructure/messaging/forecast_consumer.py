@@ -3,6 +3,7 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 from uuid import UUID
 
@@ -17,11 +18,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.modules.suggested_orders.events import SSEBroker
 from app.modules.suggested_orders.repository import (
     SuggestedOrderCalculationInProgressError,
 )
 from app.modules.suggested_orders.service import (
     InvalidLocationCodeError,
+    SuggestedOrderCalculationResult,
     SuggestedOrderService,
 )
 
@@ -38,6 +41,7 @@ class InvalidForecastLoadedEventError(ValueError):
 class ForecastLoadedEvent:
     event_id: UUID
     correlation_id: str | None
+    forecast_origin: date
     data: dict[str, Any]
 
     @classmethod
@@ -92,6 +96,18 @@ class ForecastLoadedEvent:
                 "data must be a JSON object"
             )
 
+        forecast_origin_value = data.get("forecast_origin")
+        try:
+            forecast_origin = date.fromisoformat(str(forecast_origin_value))
+        except (TypeError, ValueError) as exc:
+            raise InvalidForecastLoadedEventError(
+                "data.forecast_origin must use YYYY-MM-DD format"
+            ) from exc
+        if forecast_origin.isoformat() != forecast_origin_value:
+            raise InvalidForecastLoadedEventError(
+                "data.forecast_origin must use YYYY-MM-DD format"
+            )
+
         correlation_id = payload.get("correlation_id")
         if correlation_id is not None and not isinstance(correlation_id, str):
             raise InvalidForecastLoadedEventError(
@@ -101,6 +117,7 @@ class ForecastLoadedEvent:
         return cls(
             event_id=event_id,
             correlation_id=correlation_id,
+            forecast_origin=forecast_origin,
             data=data,
         )
 
@@ -117,6 +134,7 @@ class RabbitMQForecastLoadedConsumer:
         exchange_name: str,
         queue_name: str,
         routing_key: str,
+        sse_broker: SSEBroker,
         session_factory: Callable[[], Session] = SessionLocal,
     ) -> None:
         self.host = host
@@ -127,6 +145,7 @@ class RabbitMQForecastLoadedConsumer:
         self.exchange_name = exchange_name
         self.queue_name = queue_name
         self.routing_key = routing_key
+        self.sse_broker = sse_broker
         self.session_factory = session_factory
         self._connection: AbstractRobustConnection | None = None
         self._channel: AbstractRobustChannel | None = None
@@ -161,9 +180,17 @@ class RabbitMQForecastLoadedConsumer:
             no_ack=False,
         )
 
-    def _recalculate(self, event: ForecastLoadedEvent) -> None:
+    def _recalculate(
+        self,
+        event: ForecastLoadedEvent,
+    ) -> SuggestedOrderCalculationResult:
         with self.session_factory() as db:
-            result = SuggestedOrderService(db).recalculate(event.event_id)
+            result = SuggestedOrderService(db).recalculate(
+                event.event_id,
+                source_event_id=event.event_id,
+                correlation_id=event.correlation_id,
+                forecast_origin=event.forecast_origin,
+            )
         logger.info(
             "forecast.loaded processed",
             extra={
@@ -174,6 +201,7 @@ class RabbitMQForecastLoadedConsumer:
                 "duration_ms": result.duration_ms,
             },
         )
+        return result
 
     async def _handle_message(
         self,
@@ -190,7 +218,7 @@ class RabbitMQForecastLoadedConsumer:
             return
 
         try:
-            await asyncio.to_thread(self._recalculate, event)
+            result = await asyncio.to_thread(self._recalculate, event)
         except SuggestedOrderCalculationInProgressError:
             logger.warning(
                 "Suggested-order calculation is already in progress",
@@ -213,6 +241,14 @@ class RabbitMQForecastLoadedConsumer:
             await message.nack(requeue=not message.redelivered)
             return
 
+        if result.notification is not None:
+            try:
+                await self.sse_broker.publish(result.notification)
+            except Exception:
+                logger.exception(
+                    "Persisted SSE event could not be delivered live",
+                    extra={"event_id": str(event.event_id)},
+                )
         await message.ack()
 
     async def close(self) -> None:
@@ -226,7 +262,9 @@ class RabbitMQForecastLoadedConsumer:
         self._consumer_tag = None
 
 
-def create_forecast_loaded_consumer() -> RabbitMQForecastLoadedConsumer:
+def create_forecast_loaded_consumer(
+    sse_broker: SSEBroker,
+) -> RabbitMQForecastLoadedConsumer:
     return RabbitMQForecastLoadedConsumer(
         host=settings.rabbitmq_host,
         port=settings.rabbitmq_port,
@@ -236,4 +274,5 @@ def create_forecast_loaded_consumer() -> RabbitMQForecastLoadedConsumer:
         exchange_name=settings.rabbitmq_exchange,
         queue_name=settings.rabbitmq_forecast_loaded_queue,
         routing_key=settings.rabbitmq_forecast_loaded_routing_key,
+        sse_broker=sse_broker,
     )

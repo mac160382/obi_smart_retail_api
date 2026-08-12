@@ -1,11 +1,12 @@
-from datetime import date
-from unittest.mock import MagicMock
+from datetime import UTC, date, datetime
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.dialects import postgresql
 
 from app.modules.imports.models import pedido_sugerido
+from app.modules.suggested_orders.events import StoredSSEEvent
 from app.modules.suggested_orders.repository import (
     ReplacementCounts,
     SuggestedOrderCalculationInProgressError,
@@ -148,6 +149,78 @@ def test_service_commits_successful_replacement() -> None:
     assert result.inserted_rows == 8
     db.commit.assert_called_once()
     db.rollback.assert_not_called()
+
+
+def test_service_persists_forecast_notification_in_recalculation_transaction() -> None:
+    db = MagicMock()
+    service = SuggestedOrderService(db)
+    service.repository = MagicMock()
+    service.repository.replace_suggested_orders.return_value = ReplacementCounts(
+        deleted_rows=4,
+        inserted_rows=8,
+    )
+    source_event_id = uuid4()
+    notification = MagicMock(spec=StoredSSEEvent)
+    calls: list[str] = []
+    db.commit.side_effect = lambda: calls.append("commit")
+
+    with patch(
+        "app.modules.suggested_orders.service.SuggestedOrderEventRepository"
+    ) as event_repository_class:
+        event_repository = event_repository_class.return_value
+        event_repository.find_by_source_event_id.return_value = None
+        event_repository.create.side_effect = (
+            lambda **_kwargs: calls.append("notification") or notification
+        )
+        result = service.recalculate(
+            source_event_id,
+            source_event_id=source_event_id,
+            correlation_id="forecast-import-123",
+            forecast_origin=date(2026, 8, 11),
+        )
+
+    assert calls == ["notification", "commit"]
+    assert result.notification is notification
+    payload = event_repository.create.call_args.kwargs["payload"]
+    assert payload["status"] == "completed"
+    assert payload["forecast_event_id"] == str(source_event_id)
+    assert payload["forecast_origin"] == "2026-08-11"
+    assert payload["correlation_id"] == "forecast-import-123"
+
+
+def test_service_does_not_recalculate_an_already_processed_forecast_event() -> None:
+    db = MagicMock()
+    service = SuggestedOrderService(db)
+    service.repository = MagicMock()
+    source_event_id = uuid4()
+    existing = StoredSSEEvent(
+        id=7,
+        event_id=uuid4(),
+        event_type="suggested-orders.recalculated",
+        payload={
+            "destination": "public.pedido_sugerido",
+            "deleted_rows": 4,
+            "inserted_rows": 8,
+            "calculated_at": "2026-08-11T12:00:00+00:00",
+            "duration_ms": 250,
+        },
+        created_at=datetime(2026, 8, 11, tzinfo=UTC),
+    )
+
+    with patch(
+        "app.modules.suggested_orders.service.SuggestedOrderEventRepository"
+    ) as event_repository_class:
+        event_repository_class.return_value.find_by_source_event_id.return_value = (
+            existing
+        )
+        result = service.recalculate(
+            source_event_id,
+            source_event_id=source_event_id,
+        )
+
+    assert result.notification == existing
+    service.repository.replace_suggested_orders.assert_not_called()
+    db.commit.assert_not_called()
 
 
 def test_service_rolls_back_failed_replacement() -> None:

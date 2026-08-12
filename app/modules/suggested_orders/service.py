@@ -1,13 +1,17 @@
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from time import perf_counter
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.modules.suggested_orders.events import (
+    StoredSSEEvent,
+    SuggestedOrderEventRepository,
+)
 from app.modules.suggested_orders.repository import SuggestedOrderRepository
 
 logger = logging.getLogger(__name__)
@@ -24,6 +28,7 @@ class SuggestedOrderCalculationResult:
     inserted_rows: int
     calculated_at: datetime
     duration_ms: int
+    notification: StoredSSEEvent | None = None
 
 
 @dataclass(frozen=True)
@@ -41,11 +46,62 @@ class SuggestedOrderService:
         self.db = db
         self.repository = SuggestedOrderRepository(db)
 
-    def recalculate(self, user_id: UUID) -> SuggestedOrderCalculationResult:
+    def recalculate(
+        self,
+        user_id: UUID,
+        *,
+        source_event_id: UUID | None = None,
+        correlation_id: str | None = None,
+        forecast_origin: date | None = None,
+    ) -> SuggestedOrderCalculationResult:
         started_at = perf_counter()
+        event_repository = SuggestedOrderEventRepository(self.db)
+
+        if source_event_id is not None:
+            existing = event_repository.find_by_source_event_id(source_event_id)
+            if existing is not None:
+                payload = existing.payload
+                return SuggestedOrderCalculationResult(
+                    destination=str(payload["destination"]),
+                    deleted_rows=int(payload["deleted_rows"]),
+                    inserted_rows=int(payload["inserted_rows"]),
+                    calculated_at=datetime.fromisoformat(
+                        str(payload["calculated_at"])
+                    ),
+                    duration_ms=int(payload["duration_ms"]),
+                    notification=existing,
+                )
 
         try:
             counts = self.repository.replace_suggested_orders()
+            calculated_at = datetime.now(UTC)
+            duration_ms = round((perf_counter() - started_at) * 1000)
+            destination = (
+                f"{settings.suggested_orders_schema}."
+                f"{settings.suggested_orders_table}"
+            )
+            notification = None
+            if source_event_id is not None:
+                notification = event_repository.create(
+                    event_id=uuid4(),
+                    source_event_id=source_event_id,
+                    payload={
+                        "status": "completed",
+                        "source_event": "forecast.loaded",
+                        "forecast_event_id": str(source_event_id),
+                        "forecast_origin": (
+                            forecast_origin.isoformat()
+                            if forecast_origin is not None
+                            else None
+                        ),
+                        "correlation_id": correlation_id,
+                        "destination": destination,
+                        "deleted_rows": counts.deleted_rows,
+                        "inserted_rows": counts.inserted_rows,
+                        "calculated_at": calculated_at.isoformat(),
+                        "duration_ms": duration_ms,
+                    },
+                )
             self.db.commit()
         except DataError as exc:
             self.db.rollback()
@@ -56,8 +112,6 @@ class SuggestedOrderService:
             self.db.rollback()
             raise
 
-        calculated_at = datetime.now(UTC)
-        duration_ms = round((perf_counter() - started_at) * 1000)
         logger.info(
             "Suggested orders calculated",
             extra={
@@ -68,14 +122,12 @@ class SuggestedOrderService:
             },
         )
         return SuggestedOrderCalculationResult(
-            destination=(
-                f"{settings.suggested_orders_schema}."
-                f"{settings.suggested_orders_table}"
-            ),
+            destination=destination,
             deleted_rows=counts.deleted_rows,
             inserted_rows=counts.inserted_rows,
             calculated_at=calculated_at,
             duration_ms=duration_ms,
+            notification=notification,
         )
 
     def get_by_location(

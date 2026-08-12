@@ -56,8 +56,12 @@ class StoredSSEEvent:
     created_at: datetime
 
     def encode(self) -> str:
+        event_data = {
+            "event_id": str(self.event_id),
+            **self.payload,
+        }
         data = json.dumps(
-            self.payload,
+            event_data,
             ensure_ascii=False,
             separators=(",", ":"),
         )
@@ -92,10 +96,12 @@ class SuggestedOrderEventRepository:
     def create(
         self,
         *,
+        event_id: UUID,
         source_event_id: UUID,
         payload: dict[str, Any],
     ) -> StoredSSEEvent:
         event = SuggestedOrderEvent(
+            event_id=event_id,
             source_event_id=source_event_id,
             event_type=SUGGESTED_ORDERS_RECALCULATED_EVENT,
             payload=payload,
@@ -117,6 +123,11 @@ class SuggestedOrderEventRepository:
             .limit(limit)
         ).all()
         return [_to_stored_event(event) for event in events]
+
+    def get_latest_id(self) -> int:
+        return int(
+            self.db.scalar(select(func.max(SuggestedOrderEvent.id))) or 0
+        )
 
 
 class SSEBroker:

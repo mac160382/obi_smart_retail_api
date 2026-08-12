@@ -10,16 +10,19 @@ from app.infrastructure.messaging import (
     create_forecast_loaded_consumer,
     create_rabbitmq_publisher,
 )
+from app.modules.suggested_orders.events import create_sse_broker
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    sse_broker = create_sse_broker()
     publisher = create_rabbitmq_publisher()
-    forecast_consumer = create_forecast_loaded_consumer()
+    forecast_consumer = create_forecast_loaded_consumer(sse_broker)
     await publisher.connect()
     await forecast_consumer.connect()
     app.state.rabbitmq_publisher = publisher
     app.state.rabbitmq_forecast_consumer = forecast_consumer
+    app.state.sse_broker = sse_broker
     try:
         yield
     finally:
@@ -42,7 +45,13 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "Accept"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "Last-Event-ID",
+            "Cache-Control",
+        ],
     )
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
