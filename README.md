@@ -631,8 +631,9 @@ o un rol con permiso para reasignar el propietario.
 
 La primera etapa del Asistente está integrada y deshabilitada por defecto. Esta
 entrega incorpora el estado de salud, las diez preguntas de negocio, el
-enrutamiento local y la herramienta de consulta de pedidos sugeridos. Las demás
-herramientas se reconocen como planificadas, pero no pueden ejecutarse todavía.
+enrutamiento local y las herramientas de consulta de pedidos sugeridos y
+pronósticos. Las demás herramientas se reconocen como planificadas, pero no
+pueden ejecutarse todavía.
 
 Configuración:
 
@@ -641,7 +642,7 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.6-luna
 ASSISTANT_ENABLED=false
 ASSISTANT_REAL_LLM_ENABLED=false
-ASSISTANT_ENABLED_TOOLS=consultar_pedidos_sugeridos
+ASSISTANT_ENABLED_TOOLS=consultar_pedidos_sugeridos,consultar_pronosticos
 ASSISTANT_MAX_RECORDS=25
 ASSISTANT_MAX_TOOL_CALLS=6
 ASSISTANT_MAX_MODEL_CALLS=4

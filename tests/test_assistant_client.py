@@ -1,3 +1,4 @@
+from datetime import date
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -12,6 +13,24 @@ from app.modules.assistant.tool_executor import ToolExecutor
 
 
 class FakeRepository:
+    def get_forecasts(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/forecasts",
+                "source": "public.pronostico",
+                "records_returned": 1,
+                "total_matching": 1,
+                "has_more": False,
+            },
+            "data": [
+                {
+                    "item": "A",
+                    "location": kwargs.get("location"),
+                    "forecast_qty_vendida": 8.5,
+                }
+            ],
+        }
+
     def get_suggested_orders(self, **kwargs: Any) -> dict[str, Any]:
         return {
             "meta": {
@@ -58,12 +77,48 @@ class FakeOpenAI:
         self.responses = FakeResponses()
 
 
+class FakeForecastResponses:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        usage = SimpleNamespace(input_tokens=8, output_tokens=4, total_tokens=12)
+        if len(self.calls) == 1:
+            function_call = SimpleNamespace(
+                type="function_call",
+                name="consultar_pronosticos",
+                arguments=(
+                    '{"location":13,"forecast_origin":"2026-08-16",'
+                    '"target_date_from":"2026-08-17","target_date_to":"2026-08-23"}'
+                ),
+                call_id="forecast_call_1",
+            )
+            return SimpleNamespace(
+                id="forecast_response_1",
+                output=[function_call],
+                output_text="",
+                usage=usage,
+            )
+        return SimpleNamespace(
+            id="forecast_response_2",
+            output=[],
+            output_text="Se encontró una muestra de pronósticos.",
+            usage=usage,
+        )
+
+
+class FakeForecastOpenAI:
+    def __init__(self) -> None:
+        self.responses = FakeForecastResponses()
+
+
 def assistant_settings(**overrides: Any) -> Settings:
     values: dict[str, Any] = {
         "openai_api_key": "",
         "openai_model": "test-model",
         "assistant_real_llm_enabled": False,
-        "assistant_enabled_tools": "consultar_pedidos_sugeridos",
+        "assistant_enabled_tools": ("consultar_pedidos_sugeridos,consultar_pronosticos"),
         "assistant_max_records": 25,
         "assistant_max_model_calls": 4,
         "assistant_max_tool_calls": 6,
@@ -139,9 +194,59 @@ def test_service_executes_complete_simulated_flow() -> None:
 def test_service_reports_a_planned_but_unimplemented_tool() -> None:
     settings = assistant_settings(
         assistant_enabled=True,
-        assistant_enabled_tools="consultar_pedidos_sugeridos,consultar_pronosticos",
         app_name="Test API",
     )
     service = AssistantService(MagicMock(), settings, openai_client=FakeOpenAI())
     with pytest.raises(ToolUnavailableError, match="pendientes de migración"):
-        service.execute(AssistantRequest(question="Consulta los pronósticos"))
+        service.execute(AssistantRequest(question="Consulta las promociones vigentes"))
+
+
+def test_forecast_function_call_and_final_response_with_simulated_openai() -> None:
+    settings = assistant_settings()
+    executor = ToolExecutor(FakeRepository(), settings)
+    fake_openai = FakeForecastOpenAI()
+    client = AssistantClient(settings, executor, openai_client=fake_openai)
+
+    result = client.ask(
+        "Consulta pronósticos para la tienda 13.",
+        allowed_tools=["consultar_pronosticos"],
+    )
+
+    assert result["status"] == "SUCCESS"
+    assert result["model_calls"] == 2
+    assert result["usage"]["total_tokens"] == 24
+    assert result["tools_used"][0]["tool"] == "consultar_pronosticos"
+    assert result["tools_used"][0]["arguments"]["forecast_origin"] == date(2026, 8, 16)
+    assert "public.pronostico" in result["sources"][0]
+    assert fake_openai.responses.calls[0]["tools"][0]["name"] == ("consultar_pronosticos")
+
+
+def test_service_executes_complete_simulated_forecast_flow() -> None:
+    settings = assistant_settings(
+        assistant_enabled=True,
+        app_name="Test API",
+        forecast_schema="public",
+        forecast_table="pronostico",
+    )
+    db = MagicMock()
+    db.scalar.return_value = 1
+    db.execute.return_value.mappings.return_value.all.return_value = [
+        {
+            "item": "A",
+            "location": 13,
+            "forecast_origin": date(2026, 8, 16),
+            "target_date": date(2026, 8, 18),
+            "forecast_qty_vendida": 8.5,
+        }
+    ]
+    service = AssistantService(db, settings, openai_client=FakeForecastOpenAI())
+
+    response = service.execute(
+        AssistantRequest(question="Consulta los pronósticos para la tienda 13")
+    )
+
+    assert response.status == "SUCCESS"
+    assert response.selected_tools == ["consultar_pronosticos"]
+    assert response.tools_used[0]["tool"] == "consultar_pronosticos"
+    assert response.usage.total_tokens == 24
+    db.execute.assert_called_once()

@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.6-luna"
     assistant_enabled: bool = False
     assistant_real_llm_enabled: bool = False
-    assistant_enabled_tools: str = "consultar_pedidos_sugeridos"
+    assistant_enabled_tools: str = "consultar_pedidos_sugeridos,consultar_pronosticos"
     assistant_max_records: int = Field(default=25, ge=1, le=100)
     assistant_max_tool_calls: int = Field(default=6, ge=1, le=20)
     assistant_max_model_calls: int = Field(default=4, ge=2, le=10)

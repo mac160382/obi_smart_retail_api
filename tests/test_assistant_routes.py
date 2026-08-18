@@ -16,7 +16,10 @@ def test_assistant_health_is_available_without_authentication() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "disabled"
-    assert payload["implemented_tools"] == ["consultar_pedidos_sugeridos"]
+    assert payload["implemented_tools"] == [
+        "consultar_pedidos_sugeridos",
+        "consultar_pronosticos",
+    ]
     assert payload["real_llm_enabled"] is False
 
 
@@ -66,7 +69,12 @@ def test_authenticated_user_can_preview_routing() -> None:
     assert response.json()["routing"]["tools"] == ["consultar_pedidos_sugeridos"]
 
 
-def test_authenticated_user_can_list_questions() -> None:
+def test_authenticated_user_can_list_questions(monkeypatch) -> None:
+    monkeypatch.setattr(
+        settings,
+        "assistant_enabled_tools",
+        "consultar_pedidos_sugeridos,consultar_pronosticos",
+    )
     authenticated = authenticated_client()
     try:
         response = authenticated.get("/api/v1/assistant-light/questions")
@@ -75,7 +83,20 @@ def test_authenticated_user_can_list_questions() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["records_returned"] == 10
-    assert sum(1 for row in payload["data"] if row["available"]) == 5
+    assert sum(1 for row in payload["data"] if row["available"]) == 7
+
+
+def test_authenticated_user_can_preview_forecast_routing() -> None:
+    authenticated = authenticated_client()
+    try:
+        response = authenticated.post(
+            "/api/v1/assistant-light/route",
+            json={"question": "Consulta los pronósticos para la tienda 13"},
+        )
+    finally:
+        clear_overrides()
+    assert response.status_code == 200
+    assert response.json()["routing"]["tools"] == ["consultar_pronosticos"]
 
 
 def test_query_reports_disabled_assistant_to_authenticated_user() -> None:
@@ -106,3 +127,17 @@ def test_local_restriction_does_not_require_real_llm(monkeypatch) -> None:
     assert payload["local_restriction"] is True
     assert payload["model_called"] is False
     assert payload["usage"]["total_tokens"] == 0
+
+
+def test_unimplemented_tool_returns_conflict_before_calling_llm(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "assistant_enabled", True)
+    authenticated = authenticated_client()
+    try:
+        response = authenticated.post(
+            "/api/v1/assistant-light/query",
+            json={"question": "Consulta las promociones vigentes"},
+        )
+    finally:
+        clear_overrides()
+    assert response.status_code == 409
+    assert "pendientes de migración" in response.json()["detail"]

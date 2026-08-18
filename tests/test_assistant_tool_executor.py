@@ -11,6 +11,18 @@ class FakeRepository:
     def __init__(self) -> None:
         self.arguments: dict[str, Any] = {}
 
+    def get_forecasts(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {
+                "source": "public.pronostico",
+                "records_returned": 1,
+                "total_matching": 1,
+                "has_more": False,
+            },
+            "data": [{"item": "A", "location": 13, "forecast_qty_vendida": 8.5}],
+        }
+
     def get_suggested_orders(self, **kwargs: Any) -> dict[str, Any]:
         self.arguments = kwargs
         return {
@@ -26,7 +38,7 @@ class FakeRepository:
 
 def assistant_settings(**overrides: Any) -> Settings:
     values: dict[str, Any] = {
-        "assistant_enabled_tools": "consultar_pedidos_sugeridos",
+        "assistant_enabled_tools": ("consultar_pedidos_sugeridos,consultar_pronosticos"),
         "assistant_max_records": 25,
     }
     values.update(overrides)
@@ -69,3 +81,41 @@ def test_executor_rejects_disabled_tool() -> None:
     )
     with pytest.raises(ValueError, match="no habilitada"):
         executor.execute("consultar_pedidos_sugeridos", {})
+
+
+def test_executor_normalizes_forecast_filters() -> None:
+    repository = FakeRepository()
+    executor = ToolExecutor(repository, assistant_settings(assistant_max_records=8))
+    payload, trace = executor.execute(
+        "consultar_pronosticos",
+        {
+            "item_code": "101",
+            "location": "13",
+            "forecast_origin": "2026-08-16",
+            "target_date_from": "2026-08-17",
+            "target_date_to": "2026-08-23",
+            "horizon_day": 3,
+            "limit": 50,
+        },
+    )
+    assert repository.arguments["item_code"] == 101
+    assert repository.arguments["location"] == 13
+    assert repository.arguments["forecast_origin"] == date(2026, 8, 16)
+    assert repository.arguments["target_date_from"] == date(2026, 8, 17)
+    assert repository.arguments["target_date_to"] == date(2026, 8, 23)
+    assert repository.arguments["limit"] == 8
+    assert "order_type" not in repository.arguments
+    assert trace.tool == "consultar_pronosticos"
+    assert payload["data"][0]["forecast_qty_vendida"] == 8.5
+
+
+def test_executor_rejects_inverted_forecast_date_range() -> None:
+    executor = ToolExecutor(FakeRepository(), assistant_settings())
+    with pytest.raises(ValueError, match="no puede ser posterior"):
+        executor.execute(
+            "consultar_pronosticos",
+            {
+                "target_date_from": "2026-08-23",
+                "target_date_to": "2026-08-17",
+            },
+        )

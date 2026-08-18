@@ -14,7 +14,22 @@ from app.modules.assistant.tool_registry import (
 )
 
 
-class SuggestedOrdersReader(Protocol):
+class AssistantDataReader(Protocol):
+    def get_forecasts(
+        self,
+        *,
+        item: str | None = None,
+        item_code: int | None = None,
+        location: int | None = None,
+        location_code: int | None = None,
+        forecast_origin: date | None = None,
+        target_date_from: date | None = None,
+        target_date_to: date | None = None,
+        horizon_day: int | None = None,
+        offset: int = 0,
+        limit: int = 5,
+    ) -> dict[str, Any]: ...
+
     def get_suggested_orders(
         self,
         *,
@@ -44,7 +59,7 @@ class ToolTrace:
 
 
 class ToolExecutor:
-    def __init__(self, repository: SuggestedOrdersReader, settings: Settings) -> None:
+    def __init__(self, repository: AssistantDataReader, settings: Settings) -> None:
         self.repository = repository
         self.settings = settings
 
@@ -82,21 +97,33 @@ class ToolExecutor:
             self.settings.assistant_max_records,
         )
         clean["offset"] = min(max(int(clean.get("offset", 0)), 0), 1_000_000)
-        if "location" in clean:
-            clean["location"] = int(clean["location"])
+        for field in ("item_code", "location", "location_code"):
+            if field in clean:
+                clean[field] = int(clean[field])
         if "horizon_day" in clean:
             clean["horizon_day"] = min(max(int(clean["horizon_day"]), 1), 7)
-        for field in ("forecast_origin", "target_date"):
+        for field in (
+            "forecast_origin",
+            "target_date",
+            "target_date_from",
+            "target_date_to",
+        ):
             if field in clean:
                 clean[field] = self._optional_date(clean[field], field)
 
-        order_type = str(clean.get("order_type", "all"))
-        if order_type not in {"positive", "zero", "all"}:
-            raise ValueError("order_type debe ser positive, zero o all.")
-        clean["order_type"] = cast(Literal["positive", "zero", "all"], order_type)
-        status = clean.get("status")
-        if status not in {None, "Estimado", "Planificado", "Aprobado"}:
-            raise ValueError("status debe ser Estimado, Planificado o Aprobado.")
+        if name == "consultar_pronosticos":
+            date_from = clean.get("target_date_from")
+            date_to = clean.get("target_date_to")
+            if date_from is not None and date_to is not None and date_from > date_to:
+                raise ValueError("target_date_from no puede ser posterior a target_date_to.")
+        elif name == "consultar_pedidos_sugeridos":
+            order_type = str(clean.get("order_type", "all"))
+            if order_type not in {"positive", "zero", "all"}:
+                raise ValueError("order_type debe ser positive, zero o all.")
+            clean["order_type"] = cast(Literal["positive", "zero", "all"], order_type)
+            status = clean.get("status")
+            if status not in {None, "Estimado", "Planificado", "Aprobado"}:
+                raise ValueError("status debe ser Estimado, Planificado o Aprobado.")
         return clean
 
     def execute(
@@ -106,6 +133,7 @@ class ToolExecutor:
     ) -> tuple[dict[str, Any], ToolTrace]:
         normalized = self.normalize_arguments(name, arguments)
         handlers: dict[str, Callable[..., dict[str, Any]]] = {
+            "consultar_pronosticos": self.repository.get_forecasts,
             "consultar_pedidos_sugeridos": self.repository.get_suggested_orders,
         }
         payload = handlers[name](**normalized)

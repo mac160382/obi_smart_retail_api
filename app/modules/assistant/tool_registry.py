@@ -18,17 +18,22 @@ PLANNED_TOOL_NAMES = frozenset(
         "consultar_ejecuciones",
     }
 )
-IMPLEMENTED_TOOL_NAMES = frozenset({"consultar_pedidos_sugeridos"})
+IMPLEMENTED_TOOL_NAMES = frozenset({"consultar_pedidos_sugeridos", "consultar_pronosticos"})
 
 DEFAULT_ARGUMENTS: dict[str, dict[str, Any]] = {
+    "consultar_pronosticos": {"limit": 5},
     "consultar_pedidos_sugeridos": {"status": "Estimado", "limit": 5},
 }
 
 TOOL_ENDPOINTS = {
+    "consultar_pronosticos": "/api/v1/forecasts",
     "consultar_pedidos_sugeridos": "/api/v1/suggested-orders",
 }
 
 TOOL_DESCRIPTIONS = {
+    "consultar_pronosticos": (
+        "Consulta pronósticos publicados por artículo, tienda, origen, fecha y horizonte."
+    ),
     "consultar_pedidos_sugeridos": (
         "Consulta pedidos sugeridos, existencias, tránsito, proveedor, cantidad y estado."
     ),
@@ -42,6 +47,22 @@ def _nullable(kind: str, description: str, **extra: Any) -> dict[str, Any]:
 
 
 TOOL_PARAMETERS: dict[str, dict[str, Any]] = {
+    "consultar_pronosticos": {
+        "type": "object",
+        "properties": {
+            "item": _nullable("string", "Código del artículo."),
+            "item_code": _nullable("integer", "Código interno del artículo."),
+            "location": _nullable("integer", "Código de la tienda."),
+            "location_code": _nullable("integer", "Código interno de la tienda."),
+            "forecast_origin": _nullable("string", "Origen YYYY-MM-DD del pronóstico."),
+            "target_date_from": _nullable("string", "Fecha objetivo inicial YYYY-MM-DD."),
+            "target_date_to": _nullable("string", "Fecha objetivo final YYYY-MM-DD."),
+            "horizon_day": _nullable("integer", "Horizonte entre 1 y 7.", minimum=1, maximum=7),
+            "offset": _nullable("integer", "Posición inicial.", minimum=0),
+            "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
+        },
+        "additionalProperties": False,
+    },
     "consultar_pedidos_sugeridos": {
         "type": "object",
         "properties": {
@@ -64,7 +85,7 @@ TOOL_PARAMETERS: dict[str, dict[str, Any]] = {
             "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
         },
         "additionalProperties": False,
-    }
+    },
 }
 
 
