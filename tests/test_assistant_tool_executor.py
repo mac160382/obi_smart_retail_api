@@ -23,6 +23,16 @@ class FakeRepository:
             "data": [{"item": "A", "location": 13, "forecast_qty_vendida": 8.5}],
         }
 
+    def get_sales(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {
+                "source": "public.lacteos_ventas_historicas",
+                "records_returned": 1,
+            },
+            "data": [{"item": "A", "location": 13, "qty_vendida": 12}],
+        }
+
     def get_suggested_orders(self, **kwargs: Any) -> dict[str, Any]:
         self.arguments = kwargs
         return {
@@ -38,7 +48,9 @@ class FakeRepository:
 
 def assistant_settings(**overrides: Any) -> Settings:
     values: dict[str, Any] = {
-        "assistant_enabled_tools": ("consultar_pedidos_sugeridos,consultar_pronosticos"),
+        "assistant_enabled_tools": (
+            "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_ventas"
+        ),
         "assistant_max_records": 25,
     }
     values.update(overrides)
@@ -118,4 +130,45 @@ def test_executor_rejects_inverted_forecast_date_range() -> None:
                 "target_date_from": "2026-08-23",
                 "target_date_to": "2026-08-17",
             },
+        )
+
+
+def test_executor_normalizes_sales_filters_and_defaults() -> None:
+    repository = FakeRepository()
+    executor = ToolExecutor(repository, assistant_settings(assistant_max_records=6))
+    payload, trace = executor.execute(
+        "consultar_ventas",
+        {
+            "item": "A",
+            "location": "13",
+            "date_from": "2026-08-01",
+            "date_to": "2026-08-07",
+            "aggregation": "week",
+            "limit": 50,
+        },
+    )
+    assert repository.arguments == {
+        "item": "A",
+        "location": 13,
+        "date_from": date(2026, 8, 1),
+        "date_to": date(2026, 8, 7),
+        "aggregation": "week",
+        "limit": 6,
+    }
+    assert trace.tool == "consultar_ventas"
+    assert payload["data"][0]["qty_vendida"] == 12
+
+
+def test_executor_rejects_invalid_sales_aggregation() -> None:
+    executor = ToolExecutor(FakeRepository(), assistant_settings())
+    with pytest.raises(ValueError, match="aggregation debe ser"):
+        executor.execute("consultar_ventas", {"aggregation": "month"})
+
+
+def test_executor_rejects_inverted_sales_date_range() -> None:
+    executor = ToolExecutor(FakeRepository(), assistant_settings())
+    with pytest.raises(ValueError, match="date_from no puede"):
+        executor.execute(
+            "consultar_ventas",
+            {"date_from": "2026-08-08", "date_to": "2026-08-01"},
         )

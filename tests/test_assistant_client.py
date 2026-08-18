@@ -43,6 +43,23 @@ class FakeRepository:
             "data": [{"item": "A", "location": kwargs.get("location"), "sugerido": 4}],
         }
 
+    def get_sales(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/sales",
+                "source": "public.lacteos_ventas_historicas",
+                "records_returned": 1,
+                "aggregation": kwargs.get("aggregation"),
+            },
+            "data": [
+                {
+                    "item": "A",
+                    "location": kwargs.get("location"),
+                    "qty_vendida": 12,
+                }
+            ],
+        }
+
 
 class FakeResponses:
     def __init__(self) -> None:
@@ -113,12 +130,50 @@ class FakeForecastOpenAI:
         self.responses = FakeForecastResponses()
 
 
+class FakeSalesResponses:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        usage = SimpleNamespace(input_tokens=9, output_tokens=4, total_tokens=13)
+        if len(self.calls) == 1:
+            function_call = SimpleNamespace(
+                type="function_call",
+                name="consultar_ventas",
+                arguments=(
+                    '{"item":"A","location":13,"date_from":"2026-08-01",'
+                    '"date_to":"2026-08-07","aggregation":"week"}'
+                ),
+                call_id="sales_call_1",
+            )
+            return SimpleNamespace(
+                id="sales_response_1",
+                output=[function_call],
+                output_text="",
+                usage=usage,
+            )
+        return SimpleNamespace(
+            id="sales_response_2",
+            output=[],
+            output_text="Se encontró una muestra de ventas semanales.",
+            usage=usage,
+        )
+
+
+class FakeSalesOpenAI:
+    def __init__(self) -> None:
+        self.responses = FakeSalesResponses()
+
+
 def assistant_settings(**overrides: Any) -> Settings:
     values: dict[str, Any] = {
         "openai_api_key": "",
         "openai_model": "test-model",
         "assistant_real_llm_enabled": False,
-        "assistant_enabled_tools": ("consultar_pedidos_sugeridos,consultar_pronosticos"),
+        "assistant_enabled_tools": (
+            "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_ventas"
+        ),
         "assistant_max_records": 25,
         "assistant_max_model_calls": 4,
         "assistant_max_tool_calls": 6,
@@ -249,4 +304,49 @@ def test_service_executes_complete_simulated_forecast_flow() -> None:
     assert response.selected_tools == ["consultar_pronosticos"]
     assert response.tools_used[0]["tool"] == "consultar_pronosticos"
     assert response.usage.total_tokens == 24
+    db.execute.assert_called_once()
+
+
+def test_sales_function_call_and_final_response_with_simulated_openai() -> None:
+    settings = assistant_settings()
+    executor = ToolExecutor(FakeRepository(), settings)
+    fake_openai = FakeSalesOpenAI()
+    client = AssistantClient(settings, executor, openai_client=fake_openai)
+
+    result = client.ask(
+        "Consulta las ventas recientes del artículo A en la tienda 13.",
+        allowed_tools=["consultar_ventas"],
+    )
+
+    assert result["status"] == "SUCCESS"
+    assert result["model_calls"] == 2
+    assert result["usage"]["total_tokens"] == 26
+    assert result["tools_used"][0]["tool"] == "consultar_ventas"
+    assert result["tools_used"][0]["arguments"]["date_from"] == date(2026, 8, 1)
+    assert result["tools_used"][0]["arguments"]["aggregation"] == "week"
+    assert "public.lacteos_ventas_historicas" in result["sources"][0]
+    assert fake_openai.responses.calls[0]["tools"][0]["name"] == "consultar_ventas"
+
+
+def test_service_executes_complete_simulated_sales_flow() -> None:
+    settings = assistant_settings(
+        assistant_enabled=True,
+        app_name="Test API",
+        database_schema="public",
+        historical_sales_table="lacteos_ventas_historicas",
+    )
+    db = MagicMock()
+    db.execute.return_value.mappings.return_value.all.return_value = [
+        {"item": "A", "location": 13, "qty_vendida": 12}
+    ]
+    service = AssistantService(db, settings, openai_client=FakeSalesOpenAI())
+
+    response = service.execute(
+        AssistantRequest(question="Consulta las ventas recientes del artículo A en la tienda 13")
+    )
+
+    assert response.status == "SUCCESS"
+    assert response.selected_tools == ["consultar_ventas"]
+    assert response.tools_used[0]["tool"] == "consultar_ventas"
+    assert response.usage.total_tokens == 26
     db.execute.assert_called_once()

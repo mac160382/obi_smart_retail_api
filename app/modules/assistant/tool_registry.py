@@ -18,16 +18,20 @@ PLANNED_TOOL_NAMES = frozenset(
         "consultar_ejecuciones",
     }
 )
-IMPLEMENTED_TOOL_NAMES = frozenset({"consultar_pedidos_sugeridos", "consultar_pronosticos"})
+IMPLEMENTED_TOOL_NAMES = frozenset(
+    {"consultar_pedidos_sugeridos", "consultar_pronosticos", "consultar_ventas"}
+)
 
 DEFAULT_ARGUMENTS: dict[str, dict[str, Any]] = {
     "consultar_pronosticos": {"limit": 5},
     "consultar_pedidos_sugeridos": {"status": "Estimado", "limit": 5},
+    "consultar_ventas": {"aggregation": "day", "limit": 10},
 }
 
 TOOL_ENDPOINTS = {
     "consultar_pronosticos": "/api/v1/forecasts",
     "consultar_pedidos_sugeridos": "/api/v1/suggested-orders",
+    "consultar_ventas": "/api/v1/sales",
 }
 
 TOOL_DESCRIPTIONS = {
@@ -37,6 +41,7 @@ TOOL_DESCRIPTIONS = {
     "consultar_pedidos_sugeridos": (
         "Consulta pedidos sugeridos, existencias, tránsito, proveedor, cantidad y estado."
     ),
+    "consultar_ventas": ("Consulta ventas observadas con detalle o agregación diaria o semanal."),
 }
 
 
@@ -82,6 +87,22 @@ TOOL_PARAMETERS: dict[str, dict[str, Any]] = {
                 enum=["positive", "zero", "all", None],
             ),
             "offset": _nullable("integer", "Posición inicial.", minimum=0),
+            "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
+        },
+        "additionalProperties": False,
+    },
+    "consultar_ventas": {
+        "type": "object",
+        "properties": {
+            "item": _nullable("string", "Código del artículo."),
+            "location": _nullable("integer", "Código de la tienda."),
+            "date_from": _nullable("string", "Fecha inicial YYYY-MM-DD."),
+            "date_to": _nullable("string", "Fecha final YYYY-MM-DD."),
+            "aggregation": _nullable(
+                "string",
+                "Nivel de detalle: detail, day o week.",
+                enum=["detail", "day", "week", None],
+            ),
             "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
         },
         "additionalProperties": False,

@@ -15,6 +15,17 @@ from app.modules.assistant.tool_registry import (
 
 
 class AssistantDataReader(Protocol):
+    def get_sales(
+        self,
+        *,
+        item: str | None = None,
+        location: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        aggregation: Literal["detail", "day", "week"] = "day",
+        limit: int = 10,
+    ) -> dict[str, Any]: ...
+
     def get_forecasts(
         self,
         *,
@@ -96,7 +107,8 @@ class ToolExecutor:
             max(int(clean.get("limit", 5)), 1),
             self.settings.assistant_max_records,
         )
-        clean["offset"] = min(max(int(clean.get("offset", 0)), 0), 1_000_000)
+        if "offset" in allowed:
+            clean["offset"] = min(max(int(clean.get("offset", 0)), 0), 1_000_000)
         for field in ("item_code", "location", "location_code"):
             if field in clean:
                 clean[field] = int(clean[field])
@@ -107,6 +119,8 @@ class ToolExecutor:
             "target_date",
             "target_date_from",
             "target_date_to",
+            "date_from",
+            "date_to",
         ):
             if field in clean:
                 clean[field] = self._optional_date(clean[field], field)
@@ -116,6 +130,15 @@ class ToolExecutor:
             date_to = clean.get("target_date_to")
             if date_from is not None and date_to is not None and date_from > date_to:
                 raise ValueError("target_date_from no puede ser posterior a target_date_to.")
+        elif name == "consultar_ventas":
+            date_from = clean.get("date_from")
+            date_to = clean.get("date_to")
+            if date_from is not None and date_to is not None and date_from > date_to:
+                raise ValueError("date_from no puede ser posterior a date_to.")
+            aggregation = str(clean.get("aggregation", "day"))
+            if aggregation not in {"detail", "day", "week"}:
+                raise ValueError("aggregation debe ser detail, day o week.")
+            clean["aggregation"] = cast(Literal["detail", "day", "week"], aggregation)
         elif name == "consultar_pedidos_sugeridos":
             order_type = str(clean.get("order_type", "all"))
             if order_type not in {"positive", "zero", "all"}:
@@ -135,6 +158,7 @@ class ToolExecutor:
         handlers: dict[str, Callable[..., dict[str, Any]]] = {
             "consultar_pronosticos": self.repository.get_forecasts,
             "consultar_pedidos_sugeridos": self.repository.get_suggested_orders,
+            "consultar_ventas": self.repository.get_sales,
         }
         payload = handlers[name](**normalized)
         meta = payload.get("meta", {})

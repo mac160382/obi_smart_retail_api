@@ -169,6 +169,7 @@ def deterministic_route(question: str) -> RouteDecision:
                 "ventas historicas",
                 "historial de ventas",
                 "se han comportado las ventas",
+                "se han comportado",
             ),
             "consultar_ventas",
             "sales",

@@ -7,10 +7,11 @@ from app.modules.assistant.tool_registry import (
 )
 
 
-def test_forecasts_and_suggested_orders_are_implemented() -> None:
+def test_database_query_tools_are_implemented() -> None:
     assert IMPLEMENTED_TOOL_NAMES == {
         "consultar_pedidos_sugeridos",
         "consultar_pronosticos",
+        "consultar_ventas",
     }
 
 
@@ -31,3 +32,14 @@ def test_planned_tool_cannot_execute_before_implementation() -> None:
             ["consultar_promociones"],
             enabled_tools=["consultar_promociones"],
         )
+
+
+def test_sales_response_tool_exposes_supported_aggregations() -> None:
+    tools = response_tools(
+        ["consultar_ventas"],
+        enabled_tools=["consultar_ventas"],
+    )
+    properties = tools[0]["parameters"]["properties"]
+    assert properties["aggregation"]["enum"] == ["detail", "day", "week", None]
+    assert "date_from" in properties
+    assert "date_to" in properties
