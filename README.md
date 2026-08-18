@@ -627,6 +627,56 @@ OWNER TO smartadmin;
 El usuario utilizado para ejecutar Alembic debe ser `smartadmin`, un superusuario
 o un rol con permiso para reasignar el propietario.
 
+## Asistente LLM incremental
+
+La primera etapa del Asistente está integrada y deshabilitada por defecto. Esta
+entrega incorpora el estado de salud, las diez preguntas de negocio, el
+enrutamiento local y la herramienta de consulta de pedidos sugeridos. Las demás
+herramientas se reconocen como planificadas, pero no pueden ejecutarse todavía.
+
+Configuración:
+
+```env
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.6-luna
+ASSISTANT_ENABLED=false
+ASSISTANT_REAL_LLM_ENABLED=false
+ASSISTANT_ENABLED_TOOLS=consultar_pedidos_sugeridos
+ASSISTANT_MAX_RECORDS=25
+ASSISTANT_MAX_TOOL_CALLS=6
+ASSISTANT_MAX_MODEL_CALLS=4
+ASSISTANT_DEFAULT_FORECAST_ORIGIN=2026-06-24
+```
+
+Puntos de acceso:
+
+```text
+GET  /api/v1/assistant-light/health
+GET  /api/v1/assistant-light/questions
+POST /api/v1/assistant-light/route
+POST /api/v1/assistant-light/query
+POST /api/v1/assistant/query
+```
+
+`health` es público. Las preguntas, el enrutamiento y las consultas requieren
+un token OAuth2 Bearer. Para habilitar llamadas reales se deben configurar
+explícitamente `ASSISTANT_ENABLED=true`, `ASSISTANT_REAL_LLM_ENABLED=true` y
+`OPENAI_API_KEY`. Las pruebas automatizadas usan un cliente simulado y no
+consumen tokens.
+
+Ejemplo de consulta:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/assistant-light/query \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"¿Cuáles son los pedidos sugeridos para la tienda 13?"}'
+```
+
+El modelo solo recibe funciones incluidas en la lista cerrada de herramientas
+de lectura. No puede aprobar o recalcular pedidos, importar archivos ni ejecutar
+SQL libre.
+
 ## Archivos grandes
 
 La inserción actual se ejecuta en lotes configurables mediante:

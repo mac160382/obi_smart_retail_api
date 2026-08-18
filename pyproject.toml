@@ -18,8 +18,12 @@ dependencies = [
     "PyJWT>=2.10",
     "pwdlib[argon2]>=0.2",
     "email-validator>=2.2",
-    "aio-pika>=9.5,<10"
+    "aio-pika>=9.5,<10",
+    "openai>=3,<4",
 ]
+
+[tool.setuptools.package-data]
+"app.modules.assistant" = ["business_questions.json"]
 
 [project.optional-dependencies]
 dev = [

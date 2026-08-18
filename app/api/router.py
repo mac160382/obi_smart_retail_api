@@ -1,5 +1,7 @@
 from fastapi import APIRouter
 
+from app.modules.assistant.router import compatibility_router as assistant_compatibility_router
+from app.modules.assistant.router import router as assistant_router
 from app.modules.auth.router import router as auth_router
 from app.modules.catalogs.router import router as catalogs_router
 from app.modules.imports.router import router as imports_router
@@ -7,6 +9,12 @@ from app.modules.suggested_orders.router import router as suggested_orders_route
 
 api_router = APIRouter()
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
+api_router.include_router(
+    assistant_router,
+    prefix="/assistant-light",
+    tags=["assistant"],
+)
+api_router.include_router(assistant_compatibility_router, tags=["assistant"])
 api_router.include_router(catalogs_router, prefix="/catalogs", tags=["catalogs"])
 api_router.include_router(imports_router, prefix="/imports", tags=["imports"])
 api_router.include_router(

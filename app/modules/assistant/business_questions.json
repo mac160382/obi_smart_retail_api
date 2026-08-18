@@ -1,0 +1,82 @@
+[
+  {
+    "id": "ventas_esperadas",
+    "category": "Pronósticos",
+    "question": "¿Qué productos se espera que tengan mayores ventas durante los próximos siete días?",
+    "description": "Consulta la demanda pronosticada por artículo.",
+    "expected_tools": ["consultar_pronosticos"],
+    "keywords": ["mayores ventas", "más ventas", "mas ventas", "próximos siete días", "proximos siete dias", "esta semana"]
+  },
+  {
+    "id": "demanda_por_tienda",
+    "category": "Pronósticos",
+    "question": "¿Qué tiendas presentan la mayor demanda prevista para esta semana?",
+    "description": "Consulta la demanda pronosticada por tienda.",
+    "expected_tools": ["consultar_pronosticos"],
+    "keywords": ["tiendas", "mayor demanda", "demanda prevista"]
+  },
+  {
+    "id": "pedidos_prioritarios",
+    "category": "Pedidos",
+    "question": "¿Cuáles son los pedidos sugeridos que requieren atención primero?",
+    "description": "Consulta pedidos sugeridos y sus cantidades.",
+    "expected_tools": ["consultar_pedidos_sugeridos"],
+    "keywords": ["pedidos sugeridos", "atención primero", "atencion primero", "prioridad", "prioritarios"]
+  },
+  {
+    "id": "pedidos_por_tienda",
+    "category": "Pedidos",
+    "question": "¿Qué artículos tienen pedidos sugeridos para una tienda específica y cuántas unidades se recomiendan?",
+    "description": "Consulta artículos y unidades sugeridas dentro de una tienda.",
+    "expected_tools": ["consultar_pedidos_sugeridos"],
+    "keywords": ["artículos", "articulos", "pedidos sugeridos", "tienda", "unidades"]
+  },
+  {
+    "id": "explicar_pedido",
+    "category": "Pedidos",
+    "question": "¿Por qué se recomienda pedir esa cantidad de un artículo en una tienda determinada?",
+    "description": "Explica la recomendación utilizando predicción, existencias, tránsito y parámetros.",
+    "expected_tools": ["consultar_pedidos_sugeridos"],
+    "keywords": ["por qué se recomienda", "por que se recomienda", "esa cantidad", "explica el pedido"]
+  },
+  {
+    "id": "sin_pedido",
+    "category": "Inventario",
+    "question": "¿Qué artículos tienen suficiente inventario y no requieren un pedido en este momento?",
+    "description": "Consulta recomendaciones en cero y la información de inventario disponible.",
+    "expected_tools": ["consultar_pedidos_sugeridos"],
+    "keywords": ["suficiente inventario", "no requieren", "sin pedido", "pedido en cero"]
+  },
+  {
+    "id": "promociones",
+    "category": "Promociones",
+    "question": "¿Qué productos están actualmente en promoción y qué aumento de ventas se espera?",
+    "description": "Consulta promociones vigentes y variación esperada.",
+    "expected_tools": ["consultar_promociones"],
+    "keywords": ["promoción", "promocion", "promociones", "aumento de ventas", "uplift"]
+  },
+  {
+    "id": "ventas_recientes",
+    "category": "Ventas",
+    "question": "¿Cómo se han comportado recientemente las ventas de un artículo en una tienda específica?",
+    "description": "Consulta ventas observadas por artículo y tienda.",
+    "expected_tools": ["consultar_ventas"],
+    "keywords": ["ventas recientes", "se han comportado", "historial de ventas", "ventas de un artículo", "ventas de un articulo"]
+  },
+  {
+    "id": "pedidos_por_proveedor",
+    "category": "Proveedores",
+    "question": "¿Qué pedidos sugeridos corresponden a cada proveedor?",
+    "description": "Consulta pedidos y proveedor asociado.",
+    "expected_tools": ["consultar_pedidos_sugeridos"],
+    "keywords": ["proveedor", "proveedores", "pedidos sugeridos"]
+  },
+  {
+    "id": "factores_resultados",
+    "category": "Explicación",
+    "question": "¿Qué factores de ventas, inventario o promociones están influyendo más en los resultados actuales?",
+    "description": "Relaciona los factores principales del pronóstico con la situación de pedidos.",
+    "expected_tools": ["consultar_shap_global", "consultar_pedidos_sugeridos"],
+    "keywords": ["factores", "influyendo", "influyen", "resultados actuales", "importancia"]
+  }
+]

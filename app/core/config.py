@@ -1,3 +1,4 @@
+from datetime import date
 from functools import lru_cache
 
 from pydantic import Field
@@ -56,12 +57,30 @@ class Settings(BaseSettings):
     csv_delimiter: str = ","
     csv_batch_size: int = Field(default=1000, ge=1, le=50_000)
 
+    openai_api_key: str = ""
+    openai_model: str = "gpt-5.6-luna"
+    assistant_enabled: bool = False
+    assistant_real_llm_enabled: bool = False
+    assistant_enabled_tools: str = "consultar_pedidos_sugeridos"
+    assistant_max_records: int = Field(default=25, ge=1, le=100)
+    assistant_max_tool_calls: int = Field(default=6, ge=1, le=20)
+    assistant_max_model_calls: int = Field(default=4, ge=2, le=10)
+    assistant_default_forecast_origin: date | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
+
+    @property
+    def assistant_enabled_tool_names(self) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                name.strip() for name in self.assistant_enabled_tools.split(",") if name.strip()
+            )
+        )
 
 
 @lru_cache
