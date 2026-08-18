@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
@@ -17,10 +17,18 @@ from app.modules.suggested_orders.events import (
     SuggestedOrderEventRepository,
 )
 from app.modules.suggested_orders.repository import (
+    SuggestedOrderAlreadyApprovedError,
     SuggestedOrderCalculationInProgressError,
+    SuggestedOrderKey,
+    SuggestedOrderNotFoundError,
+    SuggestedOrderUpdateCommand,
 )
 from app.modules.suggested_orders.schemas import (
+    SuggestedOrderBatchUpdateRequest,
+    SuggestedOrderBatchUpdateResponse,
     SuggestedOrderCalculationResponse,
+    SuggestedOrderHistoryItem,
+    SuggestedOrderHistoryPageResponse,
     SuggestedOrderItem,
     SuggestedOrderPageResponse,
 )
@@ -140,6 +148,116 @@ async def stream_suggested_order_events(
     )
 
 
+@router.patch(
+    "/batch",
+    response_model=SuggestedOrderBatchUpdateResponse,
+    status_code=status.HTTP_200_OK,
+)
+def approve_suggested_orders_batch(
+    payload: SuggestedOrderBatchUpdateRequest,
+    user_id: CurrentUserId,
+    db: DatabaseSession,
+) -> SuggestedOrderBatchUpdateResponse:
+    commands = [
+        SuggestedOrderUpdateCommand(
+            key=SuggestedOrderKey(
+                item=item.item,
+                location=item.location,
+                forecast_origin=item.forecast_origin,
+            ),
+            ajustado=item.ajustado,
+            observaciones=item.observaciones,
+        )
+        for item in payload.items
+    ]
+    try:
+        result = SuggestedOrderService(db).approve_batch(user_id, commands)
+    except SuggestedOrderNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "SUGGESTED_ORDER_NOT_FOUND",
+                "message": "No se encontrÃ³ el pedido sugerido solicitado.",
+                "key": {
+                    "item": exc.key.item,
+                    "location": exc.key.location,
+                    "forecast_origin": exc.key.forecast_origin.isoformat(),
+                    "horizon_day": exc.key.horizon_day,
+                },
+            },
+        ) from exc
+    except SuggestedOrderAlreadyApprovedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ALREADY_APPROVED",
+                "message": "El pedido sugerido ya estÃ¡ aprobado.",
+                "key": {
+                    "item": exc.key.item,
+                    "location": exc.key.location,
+                    "forecast_origin": exc.key.forecast_origin.isoformat(),
+                    "horizon_day": exc.key.horizon_day,
+                },
+            },
+        ) from exc
+    except SuggestedOrderCalculationInProgressError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "SUGGESTED_ORDERS_WRITE_IN_PROGRESS",
+                "message": (
+                    "Existe un recÃ¡lculo o una aprobaciÃ³n de pedidos "
+                    "sugeridos en ejecuciÃ³n."
+                ),
+            },
+        ) from exc
+
+    return SuggestedOrderBatchUpdateResponse(
+        batch_id=result.batch_id,
+        status="completed",
+        requested_items=len(payload.items),
+        updated_items=len(result.items),
+        approved_at=result.updated_at,
+        items=[SuggestedOrderItem.model_validate(item) for item in result.items],
+    )
+
+
+@router.get(
+    "/history",
+    response_model=SuggestedOrderHistoryPageResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_suggested_order_history(
+    _user_id: CurrentUserId,
+    db: DatabaseSession,
+    item: Annotated[str, Query(min_length=1, max_length=50)],
+    location: int,
+    forecast_origin: date,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> SuggestedOrderHistoryPageResponse:
+    key = SuggestedOrderKey(
+        item=item,
+        location=location,
+        forecast_origin=forecast_origin,
+    )
+    result = SuggestedOrderService(db).get_history(key, page, page_size)
+    return SuggestedOrderHistoryPageResponse(
+        item=key.item,
+        location=key.location,
+        forecast_origin=key.forecast_origin,
+        horizon_day=1,
+        page=result.page,
+        page_size=result.page_size,
+        total_items=result.total_items,
+        total_pages=result.total_pages,
+        items=[
+            SuggestedOrderHistoryItem.model_validate(history)
+            for history in result.items
+        ],
+    )
+
+
 @router.get(
     "",
     response_model=SuggestedOrderPageResponse,
@@ -154,14 +272,20 @@ def get_suggested_orders(
     ],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
+    forecast_origin: Annotated[
+        date | None,
+        Query(description="Fecha de origen del pronostico"),
+    ] = None,
 ) -> SuggestedOrderPageResponse:
     result = SuggestedOrderService(db).get_by_location(
         location,
         page,
         page_size,
+        forecast_origin,
     )
     return SuggestedOrderPageResponse(
         location=result.location,
+        forecast_origin=result.forecast_origin,
         page=result.page,
         page_size=result.page_size,
         total_items=result.total_items,

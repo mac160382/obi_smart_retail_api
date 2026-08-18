@@ -417,7 +417,7 @@ Las migraciones crean `public.pedido_sugerido` con las siguientes columnas,
 todas obligatorias y sin llave primaria:
 
 ```text
-item,forecast_origin,horizon_day,target_date,location,descripcion_tienda,descripcion_item,descripcion_proveedor,prediccion,ajustado,lead_time_days,review_period_days,uplift_esperado,minimum_handling_quantity_units,current_stock_units,on_order_in_transit_units,sugerido,status
+item,forecast_origin,horizon_day,target_date,location,descripcion_tienda,descripcion_item,descripcion_proveedor,prediccion,ajustado,observaciones,approved_by,approved_at,updated_at,lead_time_days,review_period_days,uplift_esperado,minimum_handling_quantity_units,current_stock_units,on_order_in_transit_units,sugerido,status
 ```
 
 `descripcion_item` utiliza `varchar(60)` y `descripcion_proveedor`, `varchar(67)`,
@@ -427,6 +427,11 @@ de acuerdo con las longitudes de las columnas fuente. `prediccion` utiliza
 utilizan `integer`. `status` admite `Estimado`, `Planificado` y `Aprobado`, con
 `Estimado` como valor predeterminado. `forecast_origin` y `target_date` utilizan
 `date`, y `horizon_day`, `integer`; las tres columnas son obligatorias.
+
+La combinacion `item`, `location`, `forecast_origin` y `horizon_day` es unica,
+aunque la tabla continua sin llave primaria. Las columnas `observaciones`,
+`approved_by`, `approved_at` y `updated_at` permiten consultar la ultima
+aprobacion aplicada.
 
 ## Calcular pedido sugerido
 
@@ -456,6 +461,12 @@ Cada recálculo obtiene `descripcion_item` de `description_item_code`,
 `status` en `Estimado`. Como `ajustado` no forma parte del cálculo, queda en
 `NULL` después de cada reemplazo.
 
+El recalculo elimina solamente los registros que no estan aprobados. Los
+registros con `status=Aprobado` se conservan y no se inserta otro registro con
+la misma combinacion de `item`, `location`, `forecast_origin` y `horizon_day`.
+Por lo tanto, sus valores `ajustado`, `observaciones` y datos de aprobacion no
+se pierden durante un recalculo posterior.
+
 Una respuesta exitosa utiliza `200 OK`:
 
 ```json
@@ -474,6 +485,14 @@ Para consultar los pedidos de una ubicación se utiliza el endpoint paginado:
 
 ```bash
 curl "http://localhost:8000/api/v1/suggested-orders?location=13&page=1&page_size=50" \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN"
+```
+
+Para limitar los resultados a una fecha de origen del pronostico se puede
+enviar el parametro opcional `forecast_origin` en formato `YYYY-MM-DD`:
+
+```bash
+curl "http://localhost:8000/api/v1/suggested-orders?location=13&forecast_origin=2026-08-16&page=1&page_size=50" \
   -H "Authorization: Bearer REEMPLAZAR_TOKEN"
 ```
 
@@ -501,6 +520,10 @@ en `1` y `page_size` admite valores de `1` a `200`. Los resultados se ordenan po
       "descripcion_proveedor": "Descripción del proveedor",
       "prediccion": 25.5,
       "ajustado": null,
+      "observaciones": null,
+      "approved_by": null,
+      "approved_at": null,
+      "updated_at": null,
       "lead_time_days": 2,
       "review_period_days": 7,
       "uplift_esperado": 0.15,
@@ -513,6 +536,47 @@ en `1` y `page_size` admite valores de `1` a `200`. Los resultados se ordenan po
   ]
 }
 ```
+
+## Aprobar pedidos sugeridos en batch
+
+El endpoint autenticado permite aprobar de uno a 500 registros en una sola
+transaccion:
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/suggested-orders/batch \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "items": [
+      {
+        "item": "ITEM001",
+        "location": 13,
+        "forecast_origin": "2026-08-16",
+        "ajustado": 27.5,
+        "observaciones": "Ajuste por demanda extraordinaria"
+      }
+    ]
+  }'
+```
+
+La API localiza cada registro mediante `item`, `location`, `forecast_origin` y
+`horizon_day = 1`. Al actualizar establece `status=Aprobado`, registra el
+usuario y la fecha, y guarda el antes y despues en
+`public.pedido_sugerido_historial`. Si una llave no existe, ya esta aprobada o
+se repite dentro del batch, ninguna modificacion del batch se confirma.
+
+Un registro aprobado no se puede modificar nuevamente. La respuesta incluye
+el `batch_id`, conteos y los registros actualizados.
+
+## Consultar historial de aprobaciones
+
+```bash
+curl "http://localhost:8000/api/v1/suggested-orders/history?item=ITEM001&location=13&forecast_origin=2026-08-16&page=1&page_size=50" \
+  -H "Authorization: Bearer REEMPLAZAR_TOKEN"
+```
+
+La consulta utiliza siempre `horizon_day = 1` y devuelve los valores anteriores
+y nuevos, observaciones, usuario, fecha y `batch_id` de cada modificacion.
 
 ## Catálogo de ubicaciones
 

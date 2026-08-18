@@ -15,12 +15,17 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import (
     DOUBLE_PRECISION,
-    ENUM as PGEnum,
     JSONB,
+)
+from sqlalchemy.dialects.postgresql import (
+    ENUM as PGEnum,
+)
+from sqlalchemy.dialects.postgresql import (
     UUID as PGUUID,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -239,6 +244,10 @@ pedido_sugerido = Table(
     Column("descripcion_tienda", String(50), nullable=False),
     Column("prediccion", DOUBLE_PRECISION, nullable=False),
     Column("ajustado", DOUBLE_PRECISION, nullable=True),
+    Column("observaciones", Text, nullable=True),
+    Column("approved_by", PGUUID(as_uuid=True), nullable=True),
+    Column("approved_at", DateTime(timezone=True), nullable=True),
+    Column("updated_at", DateTime(timezone=True), nullable=True),
     Column("lead_time_days", Integer, nullable=False),
     Column("review_period_days", Integer, nullable=False),
     Column("uplift_esperado", Numeric(18, 4), nullable=False),
@@ -260,5 +269,33 @@ pedido_sugerido = Table(
         server_default="Estimado",
         nullable=False,
     ),
+    UniqueConstraint(
+        "item",
+        "location",
+        "forecast_origin",
+        "horizon_day",
+        name="uq_pedido_sugerido_logical_key",
+    ),
+    schema=settings.suggested_orders_schema,
+)
+
+pedido_sugerido_historial = Table(
+    "pedido_sugerido_historial",
+    business_metadata,
+    Column("change_id", PGUUID(as_uuid=True), primary_key=True),
+    Column("batch_id", PGUUID(as_uuid=True), nullable=False),
+    Column("item", String(50), nullable=False),
+    Column("location", Integer, nullable=False),
+    Column("forecast_origin", Date, nullable=False),
+    Column("horizon_day", Integer, nullable=False),
+    Column("target_date", Date, nullable=False),
+    Column("ajustado_anterior", DOUBLE_PRECISION, nullable=True),
+    Column("ajustado_nuevo", DOUBLE_PRECISION, nullable=False),
+    Column("observaciones_anteriores", Text, nullable=True),
+    Column("observaciones_nuevas", Text, nullable=False),
+    Column("status_anterior", String(20), nullable=False),
+    Column("status_nuevo", String(20), nullable=False),
+    Column("modified_by", PGUUID(as_uuid=True), nullable=False),
+    Column("modified_at", DateTime(timezone=True), nullable=False),
     schema=settings.suggested_orders_schema,
 )

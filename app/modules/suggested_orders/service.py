@@ -12,7 +12,13 @@ from app.modules.suggested_orders.events import (
     StoredSSEEvent,
     SuggestedOrderEventRepository,
 )
-from app.modules.suggested_orders.repository import SuggestedOrderRepository
+from app.modules.suggested_orders.repository import (
+    SuggestedOrderBatchData,
+    SuggestedOrderHistoryPageData,
+    SuggestedOrderKey,
+    SuggestedOrderRepository,
+    SuggestedOrderUpdateCommand,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +40,17 @@ class SuggestedOrderCalculationResult:
 @dataclass(frozen=True)
 class SuggestedOrderPageResult:
     location: int
+    page: int
+    page_size: int
+    total_items: int
+    total_pages: int
+    items: list[dict[str, object]]
+    forecast_origin: date | None = None
+
+
+@dataclass(frozen=True)
+class SuggestedOrderHistoryPageResult:
+    key: SuggestedOrderKey
     page: int
     page_size: int
     total_items: int
@@ -135,8 +152,14 @@ class SuggestedOrderService:
         location: int,
         page: int,
         page_size: int,
+        forecast_origin: date | None = None,
     ) -> SuggestedOrderPageResult:
-        result = self.repository.get_by_location(location, page, page_size)
+        result = self.repository.get_by_location(
+            location,
+            page,
+            page_size,
+            forecast_origin,
+        )
         total_pages = (
             (result.total_items + page_size - 1) // page_size
             if result.total_items
@@ -144,6 +167,60 @@ class SuggestedOrderService:
         )
         return SuggestedOrderPageResult(
             location=location,
+            page=page,
+            page_size=page_size,
+            total_items=result.total_items,
+            total_pages=total_pages,
+            items=result.items,
+            forecast_origin=forecast_origin,
+        )
+
+    def approve_batch(
+        self,
+        user_id: UUID,
+        commands: list[SuggestedOrderUpdateCommand],
+    ) -> SuggestedOrderBatchData:
+        batch_id = uuid4()
+        approved_at = datetime.now(UTC)
+        try:
+            result = self.repository.approve_batch(
+                commands,
+                user_id,
+                batch_id,
+                approved_at,
+            )
+            self.db.commit()
+            logger.info(
+                "Suggested orders approved",
+                extra={
+                    "user_id": str(user_id),
+                    "batch_id": str(batch_id),
+                    "updated_items": len(result.items),
+                },
+            )
+            return result
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def get_history(
+        self,
+        key: SuggestedOrderKey,
+        page: int,
+        page_size: int,
+    ) -> SuggestedOrderHistoryPageResult:
+        result: SuggestedOrderHistoryPageData = self.repository.get_history(
+            key,
+            page,
+            page_size,
+        )
+        total_pages = (
+            (result.total_items + page_size - 1) // page_size
+            if result.total_items
+            else 0
+        )
+        return SuggestedOrderHistoryPageResult(
+            key=key,
             page=page,
             page_size=page_size,
             total_items=result.total_items,
