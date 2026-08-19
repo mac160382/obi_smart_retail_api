@@ -1,0 +1,30 @@
+{
+  "project": "Smart Retail",
+  "version": "assistant-artifact-manifest-v1",
+  "files": [
+    {
+      "role": "validation_metrics",
+      "filename": "phase11_07_random_forest_metrics_cutoff_2026-06-22.csv"
+    },
+    {
+      "role": "test_metrics",
+      "filename": "phase11_10_random_forest_test_metrics_cutoff_2026-06-22.csv"
+    },
+    {
+      "role": "shap_sample",
+      "filename": "phase12_shap_sample_cutoff_2026-06-22.csv"
+    },
+    {
+      "role": "shap_global",
+      "filename": "phase12_shap_global_importance_cutoff_2026-06-22.csv"
+    },
+    {
+      "role": "shap_horizons",
+      "filename": "phase12_shap_importance_by_horizon_cutoff_2026-06-22.csv"
+    },
+    {
+      "role": "shap_local",
+      "filename": "phase12_shap_local_contributions_cutoff_2026-06-22.csv"
+    }
+  ]
+}

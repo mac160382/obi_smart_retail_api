@@ -20,10 +20,14 @@ def test_assistant_health_is_available_without_authentication() -> None:
         "consultar_articulos",
         "consultar_ejecuciones",
         "consultar_inventario",
+        "consultar_metricas_modelo",
         "consultar_parametros",
         "consultar_pedidos_sugeridos",
         "consultar_promociones",
         "consultar_pronosticos",
+        "consultar_shap_global",
+        "consultar_shap_horizontes",
+        "consultar_shap_local",
         "consultar_tiendas",
         "consultar_ventas",
     ]
@@ -82,7 +86,8 @@ def test_authenticated_user_can_list_questions(monkeypatch) -> None:
         "assistant_enabled_tools",
         "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
         "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,"
-        "consultar_promociones,consultar_ejecuciones",
+        "consultar_promociones,consultar_ejecuciones,consultar_metricas_modelo,"
+        "consultar_shap_global,consultar_shap_horizontes,consultar_shap_local",
     )
     authenticated = authenticated_client()
     try:
@@ -92,7 +97,7 @@ def test_authenticated_user_can_list_questions(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["records_returned"] == 10
-    assert sum(1 for row in payload["data"] if row["available"]) == 9
+    assert sum(1 for row in payload["data"] if row["available"]) == 10
 
 
 def test_authenticated_user_can_preview_forecast_routing() -> None:
@@ -156,8 +161,9 @@ def test_local_restriction_does_not_require_real_llm(monkeypatch) -> None:
     assert payload["usage"]["total_tokens"] == 0
 
 
-def test_unimplemented_tool_returns_conflict_before_calling_llm(monkeypatch) -> None:
+def test_disabled_tool_returns_conflict_before_calling_llm(monkeypatch) -> None:
     monkeypatch.setattr(settings, "assistant_enabled", True)
+    monkeypatch.setattr(settings, "assistant_enabled_tools", "consultar_ventas")
     authenticated = authenticated_client()
     try:
         response = authenticated.post(
@@ -167,4 +173,4 @@ def test_unimplemented_tool_returns_conflict_before_calling_llm(monkeypatch) -> 
     finally:
         clear_overrides()
     assert response.status_code == 409
-    assert "pendientes de migración" in response.json()["detail"]
+    assert "no implementadas o no habilitadas" in response.json()["detail"]

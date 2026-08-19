@@ -29,6 +29,10 @@ IMPLEMENTED_TOOL_NAMES = frozenset(
         "consultar_parametros",
         "consultar_promociones",
         "consultar_ejecuciones",
+        "consultar_metricas_modelo",
+        "consultar_shap_global",
+        "consultar_shap_horizontes",
+        "consultar_shap_local",
     }
 )
 
@@ -42,6 +46,10 @@ DEFAULT_ARGUMENTS: dict[str, dict[str, Any]] = {
     "consultar_parametros": {"limit": 10},
     "consultar_promociones": {"limit": 10},
     "consultar_ejecuciones": {},
+    "consultar_metricas_modelo": {"dataset": "test", "limit": 10},
+    "consultar_shap_global": {"top_n": 10},
+    "consultar_shap_horizontes": {"top_n": 10},
+    "consultar_shap_local": {"top_n": 10},
 }
 
 TOOL_ENDPOINTS = {
@@ -54,6 +62,10 @@ TOOL_ENDPOINTS = {
     "consultar_parametros": "/api/v1/parameters",
     "consultar_promociones": "/api/v1/promotions",
     "consultar_ejecuciones": "/api/v1/executions",
+    "consultar_metricas_modelo": "/api/v1/model/metrics",
+    "consultar_shap_global": "/api/v1/shap/global",
+    "consultar_shap_horizontes": "/api/v1/shap/horizons",
+    "consultar_shap_local": "/api/v1/shap/local",
 }
 
 TOOL_DESCRIPTIONS = {
@@ -70,6 +82,10 @@ TOOL_DESCRIPTIONS = {
     "consultar_parametros": "Consulta tiempos de entrega, revisión y parámetros de reposición.",
     "consultar_promociones": "Consulta promociones vigentes y la variación esperada.",
     "consultar_ejecuciones": "Consulta el estado disponible de ejecuciones registradas.",
+    "consultar_metricas_modelo": "Consulta métricas ya calculadas del Random Forest global.",
+    "consultar_shap_global": "Consulta importancia global SHAP ya calculada.",
+    "consultar_shap_horizontes": "Consulta importancia SHAP ya calculada por horizonte.",
+    "consultar_shap_local": "Consulta contribuciones SHAP locales ya calculadas.",
 }
 
 
@@ -194,6 +210,48 @@ TOOL_PARAMETERS: dict[str, dict[str, Any]] = {
         "type": "object",
         "properties": {
             "phase": _nullable("string", "Fase que se desea consultar."),
+        },
+        "additionalProperties": False,
+    },
+    "consultar_metricas_modelo": {
+        "type": "object",
+        "properties": {
+            "dataset": _nullable(
+                "string",
+                "Conjunto validation o test.",
+                enum=["validation", "test", None],
+            ),
+            "evaluation_level": _nullable("string", "Nivel de evaluación."),
+            "horizon_day": _nullable("integer", "Horizonte entre 1 y 7.", minimum=1, maximum=7),
+            "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
+        },
+        "additionalProperties": False,
+    },
+    "consultar_shap_global": {
+        "type": "object",
+        "properties": {
+            "predictor": _nullable("string", "Nombre de un predictor."),
+            "top_n": _nullable("integer", "Cantidad de predictores.", minimum=1, maximum=15),
+        },
+        "additionalProperties": False,
+    },
+    "consultar_shap_horizontes": {
+        "type": "object",
+        "properties": {
+            "horizon_day": _nullable("integer", "Horizonte entre 1 y 7.", minimum=1, maximum=7),
+            "top_n": _nullable("integer", "Cantidad por horizonte.", minimum=1, maximum=15),
+        },
+        "additionalProperties": False,
+    },
+    "consultar_shap_local": {
+        "type": "object",
+        "properties": {
+            "sample_id": _nullable("string", "Identificador de la observación SHAP."),
+            "item_code": _nullable("integer", "Código interno del artículo."),
+            "location_code": _nullable("integer", "Código interno de tienda."),
+            "target_date": _nullable("string", "Fecha objetivo YYYY-MM-DD."),
+            "horizon_day": _nullable("integer", "Horizonte entre 1 y 7.", minimum=1, maximum=7),
+            "top_n": _nullable("integer", "Cantidad de contribuciones.", minimum=1, maximum=10),
         },
         "additionalProperties": False,
     },

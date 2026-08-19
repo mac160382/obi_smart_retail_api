@@ -71,6 +71,38 @@ class FakeRepository:
             "data": [{"phase": kwargs.get("phase"), "status": "SUCCESS"}],
         }
 
+    def get_model_metrics(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {"source": "metrics.csv", "records_returned": 1},
+            "data": [{"evaluation_level": "period", "mae": "1.5"}],
+        }
+
+    def get_shap_global(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {"source": "shap_global.csv", "records_returned": 1},
+            "data": [{"predictor": "price"}],
+        }
+
+    def get_shap_horizons(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {"source": "shap_horizons.csv", "records_returned": 1},
+            "data": [{"horizon_day": kwargs.get("horizon_day"), "predictor": "price"}],
+        }
+
+    def get_shap_local(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {
+                "source": ["shap_sample.csv", "shap_local.csv"],
+                "records_returned": 1,
+                "local_shap_available": True,
+            },
+            "data": [{"sample_id": kwargs.get("sample_id"), "predictor": "price"}],
+        }
+
     def get_sales(self, **kwargs: Any) -> dict[str, Any]:
         self.arguments = kwargs
         return {
@@ -99,7 +131,8 @@ def assistant_settings(**overrides: Any) -> Settings:
         "assistant_enabled_tools": (
             "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
             "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,"
-            "consultar_promociones,consultar_ejecuciones"
+            "consultar_promociones,consultar_ejecuciones,consultar_metricas_modelo,"
+            "consultar_shap_global,consultar_shap_horizontes,consultar_shap_local"
         ),
         "assistant_max_records": 25,
     }
@@ -298,3 +331,67 @@ def test_executor_does_not_inject_limit_into_executions() -> None:
     assert repository.arguments == {"phase": "13.1"}
     assert trace.tool == "consultar_ejecuciones"
     assert payload["data"][0]["status"] == "SUCCESS"
+
+
+def test_executor_normalizes_model_metrics_arguments() -> None:
+    repository = FakeRepository()
+    executor = ToolExecutor(repository, assistant_settings(assistant_max_records=6))
+
+    executor.execute(
+        "consultar_metricas_modelo",
+        {"dataset": "validation", "evaluation_level": "period", "horizon_day": "2", "limit": 20},
+    )
+
+    assert repository.arguments == {
+        "dataset": "validation",
+        "evaluation_level": "period",
+        "horizon_day": 2,
+        "limit": 6,
+    }
+
+
+@pytest.mark.parametrize(
+    ("tool", "maximum"),
+    [
+        ("consultar_shap_global", 15),
+        ("consultar_shap_horizontes", 15),
+        ("consultar_shap_local", 10),
+    ],
+)
+def test_executor_clamps_shap_top_n(tool: str, maximum: int) -> None:
+    repository = FakeRepository()
+    executor = ToolExecutor(repository, assistant_settings())
+    arguments: dict[str, Any] = {"top_n": 99}
+    if tool == "consultar_shap_local":
+        arguments["sample_id"] = "S1"
+
+    executor.execute(tool, arguments)
+
+    assert repository.arguments["top_n"] == maximum
+
+
+def test_executor_normalizes_shap_local_composite_key() -> None:
+    repository = FakeRepository()
+    executor = ToolExecutor(repository, assistant_settings())
+
+    executor.execute(
+        "consultar_shap_local",
+        {
+            "item_code": "101",
+            "location_code": "13",
+            "target_date": "2026-08-18",
+            "horizon_day": "2",
+        },
+    )
+
+    assert repository.arguments["item_code"] == 101
+    assert repository.arguments["location_code"] == 13
+    assert repository.arguments["target_date"] == date(2026, 8, 18)
+    assert repository.arguments["horizon_day"] == 2
+
+
+def test_executor_rejects_incomplete_shap_local_key() -> None:
+    executor = ToolExecutor(FakeRepository(), assistant_settings())
+
+    with pytest.raises(ValueError, match="Indique sample_id"):
+        executor.execute("consultar_shap_local", {"item_code": 101})

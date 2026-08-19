@@ -67,6 +67,40 @@ class AssistantDataReader(Protocol):
 
     def get_executions(self, *, phase: str | None = None) -> dict[str, Any]: ...
 
+    def get_model_metrics(
+        self,
+        *,
+        dataset: Literal["validation", "test"] = "test",
+        evaluation_level: str | None = None,
+        horizon_day: int | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]: ...
+
+    def get_shap_global(
+        self,
+        *,
+        predictor: str | None = None,
+        top_n: int = 10,
+    ) -> dict[str, Any]: ...
+
+    def get_shap_horizons(
+        self,
+        *,
+        horizon_day: int | None = None,
+        top_n: int = 10,
+    ) -> dict[str, Any]: ...
+
+    def get_shap_local(
+        self,
+        *,
+        sample_id: str | None = None,
+        item_code: int | None = None,
+        location_code: int | None = None,
+        target_date: date | None = None,
+        horizon_day: int | None = None,
+        top_n: int = 10,
+    ) -> dict[str, Any]: ...
+
     def get_sales(
         self,
         *,
@@ -162,10 +196,13 @@ class ToolExecutor:
             )
         if "offset" in allowed:
             clean["offset"] = min(max(int(clean.get("offset", 0)), 0), 1_000_000)
+        if "top_n" in allowed:
+            maximum = 10 if name == "consultar_shap_local" else 15
+            clean["top_n"] = min(max(int(clean.get("top_n", 10)), 1), maximum)
         for field in ("itemtype", "familia_cod", "location", "estado", "supplier"):
             if field in clean:
                 clean[field] = int(clean[field])
-        if name == "consultar_pronosticos":
+        if name in {"consultar_pronosticos", "consultar_shap_local"}:
             for field in ("item_code", "location_code"):
                 if field in clean:
                     clean[field] = int(clean[field])
@@ -188,6 +225,21 @@ class ToolExecutor:
             date_to = clean.get("target_date_to")
             if date_from is not None and date_to is not None and date_from > date_to:
                 raise ValueError("target_date_from no puede ser posterior a target_date_to.")
+        elif name == "consultar_metricas_modelo":
+            dataset = str(clean.get("dataset", "test"))
+            if dataset not in {"validation", "test"}:
+                raise ValueError("dataset debe ser validation o test.")
+            clean["dataset"] = cast(Literal["validation", "test"], dataset)
+        elif name == "consultar_shap_local":
+            has_composite_key = all(
+                clean.get(field) is not None
+                for field in ("item_code", "location_code", "target_date", "horizon_day")
+            )
+            if clean.get("sample_id") is None and not has_composite_key:
+                raise ValueError(
+                    "Indique sample_id o item_code + location_code + "
+                    "target_date + horizon_day."
+                )
         elif name == "consultar_ventas":
             date_from = clean.get("date_from")
             date_to = clean.get("date_to")
@@ -223,6 +275,10 @@ class ToolExecutor:
             "consultar_parametros": self.repository.get_parameters,
             "consultar_promociones": self.repository.get_promotions,
             "consultar_ejecuciones": self.repository.get_executions,
+            "consultar_metricas_modelo": self.repository.get_model_metrics,
+            "consultar_shap_global": self.repository.get_shap_global,
+            "consultar_shap_horizontes": self.repository.get_shap_horizons,
+            "consultar_shap_local": self.repository.get_shap_local,
         }
         payload = handlers[name](**normalized)
         meta = payload.get("meta", {})
@@ -247,6 +303,7 @@ class ToolExecutor:
                 "records_returned",
                 "total_matching",
                 "has_more",
+                "local_shap_available",
             )
             if key in meta
         }

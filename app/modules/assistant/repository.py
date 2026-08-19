@@ -8,6 +8,7 @@ from sqlalchemy import cast, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.modules.assistant.artifacts import AssistantArtifactStore, optional_int
 from app.modules.imports.models import (
     g2_lacteos_promociones_vigentes,
     g2_maestro_inventario_lacteos,
@@ -23,6 +24,7 @@ class AssistantQueryRepository:
     def __init__(self, db: Session, settings: Settings) -> None:
         self.db = db
         self.settings = settings
+        self.artifacts = AssistantArtifactStore(settings)
 
     def get_items(
         self,
@@ -283,6 +285,164 @@ class AssistantQueryRepository:
                 "records_returned": len(data),
             },
             "data": data,
+        }
+
+    def get_model_metrics(
+        self,
+        *,
+        dataset: Literal["validation", "test"] = "test",
+        evaluation_level: str | None = None,
+        horizon_day: int | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        role = "validation_metrics" if dataset == "validation" else "test_metrics"
+        filtered: list[dict[str, str]] = []
+        for row in self.artifacts.rows(role):
+            if evaluation_level is not None and row.get("evaluation_level") != evaluation_level:
+                continue
+            if horizon_day is not None and optional_int(row.get("horizon_day")) != horizon_day:
+                continue
+            filtered.append(row)
+            if len(filtered) >= limit:
+                break
+
+        path = self.artifacts.path(role)
+        filters = {
+            "dataset": dataset,
+            "evaluation_level": evaluation_level,
+            "horizon_day": horizon_day,
+            "limit": limit,
+        }
+        return {
+            "meta": {
+                "endpoint": "/api/v1/model/metrics",
+                "source": path.name,
+                "filters_applied": {
+                    key: value for key, value in filters.items() if value is not None
+                },
+                "records_returned": len(filtered),
+            },
+            "data": filtered,
+        }
+
+    def get_shap_global(
+        self,
+        *,
+        predictor: str | None = None,
+        top_n: int = 10,
+    ) -> dict[str, Any]:
+        rows = self.artifacts.rows("shap_global")
+        selected = (
+            [row for row in rows if row.get("predictor") == predictor]
+            if predictor is not None
+            else rows[:top_n]
+        )
+        path = self.artifacts.path("shap_global")
+        return {
+            "meta": {
+                "endpoint": "/api/v1/shap/global",
+                "source": path.name,
+                "filters_applied": {"predictor": predictor, "top_n": top_n},
+                "records_returned": len(selected),
+            },
+            "data": selected,
+        }
+
+    def get_shap_horizons(
+        self,
+        *,
+        horizon_day: int | None = None,
+        top_n: int = 10,
+    ) -> dict[str, Any]:
+        rows = self.artifacts.rows("shap_horizons")
+        if horizon_day is not None:
+            selected = [
+                row for row in rows if optional_int(row.get("horizon_day")) == horizon_day
+            ][:top_n]
+        else:
+            counts: dict[int, int] = {}
+            selected = []
+            for row in rows:
+                horizon = optional_int(row.get("horizon_day"))
+                if horizon is None:
+                    continue
+                count = counts.get(horizon, 0)
+                if count < top_n:
+                    selected.append(row)
+                    counts[horizon] = count + 1
+
+        path = self.artifacts.path("shap_horizons")
+        return {
+            "meta": {
+                "endpoint": "/api/v1/shap/horizons",
+                "source": path.name,
+                "filters_applied": {"horizon_day": horizon_day, "top_n": top_n},
+                "records_returned": len(selected),
+            },
+            "data": selected,
+        }
+
+    def get_shap_local(
+        self,
+        *,
+        sample_id: str | None = None,
+        item_code: int | None = None,
+        location_code: int | None = None,
+        target_date: date | None = None,
+        horizon_day: int | None = None,
+        top_n: int = 10,
+    ) -> dict[str, Any]:
+        has_composite_key = all(
+            value is not None
+            for value in (item_code, location_code, target_date, horizon_day)
+        )
+        if sample_id is None and not has_composite_key:
+            raise ValueError(
+                "Indique sample_id o item_code + location_code + target_date + horizon_day."
+            )
+
+        target_text = target_date.isoformat() if target_date is not None else None
+        matched: list[dict[str, str]] = []
+        for row in self.artifacts.rows("shap_local"):
+            if sample_id is not None:
+                if row.get("sample_id") != sample_id:
+                    continue
+            else:
+                if optional_int(row.get("item_code")) != item_code:
+                    continue
+                if optional_int(row.get("location_code")) != location_code:
+                    continue
+                if row.get("target_date") != target_text:
+                    continue
+                if optional_int(row.get("horizon_day")) != horizon_day:
+                    continue
+            matched.append(row)
+
+        matched.sort(key=lambda row: optional_int(row.get("local_rank")) or 999_999)
+        matched = matched[:top_n]
+        sources = [
+            self.artifacts.path("shap_sample").name,
+            self.artifacts.path("shap_local").name,
+        ]
+        filters = {
+            "sample_id": sample_id,
+            "item_code": item_code,
+            "location_code": location_code,
+            "target_date": target_date,
+            "horizon_day": horizon_day,
+            "top_n": top_n,
+        }
+        return {
+            "meta": {
+                "endpoint": "/api/v1/shap/local",
+                "source": sources,
+                "filters_applied": {
+                    key: value for key, value in filters.items() if value is not None
+                },
+                "records_returned": len(matched),
+                "local_shap_available": bool(matched),
+            },
+            "data": matched,
         }
 
     def get_promotions(

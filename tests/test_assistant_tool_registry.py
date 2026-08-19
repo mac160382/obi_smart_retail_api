@@ -18,6 +18,10 @@ def test_database_query_tools_are_implemented() -> None:
         "consultar_tiendas",
         "consultar_ventas",
         "consultar_ejecuciones",
+        "consultar_metricas_modelo",
+        "consultar_shap_global",
+        "consultar_shap_horizontes",
+        "consultar_shap_local",
     }
 
 
@@ -32,11 +36,11 @@ def test_forecast_response_tool_has_closed_parameter_schema() -> None:
     assert "target_date_from" in tools[0]["parameters"]["properties"]
 
 
-def test_planned_tool_cannot_execute_before_implementation() -> None:
-    with pytest.raises(ValueError, match="no implementada"):
+def test_implemented_tool_must_be_enabled() -> None:
+    with pytest.raises(ValueError, match="no habilitada"):
         validate_selected_tools(
             ["consultar_metricas_modelo"],
-            enabled_tools=["consultar_metricas_modelo"],
+            enabled_tools=[],
         )
 
 
@@ -66,6 +70,16 @@ def test_sales_response_tool_exposes_supported_aggregations() -> None:
         ("consultar_parametros", {"item", "location", "supplier", "limit"}),
         ("consultar_promociones", {"item", "event_code", "status", "active_on", "limit"}),
         ("consultar_ejecuciones", {"phase"}),
+        (
+            "consultar_metricas_modelo",
+            {"dataset", "evaluation_level", "horizon_day", "limit"},
+        ),
+        ("consultar_shap_global", {"predictor", "top_n"}),
+        ("consultar_shap_horizontes", {"horizon_day", "top_n"}),
+        (
+            "consultar_shap_local",
+            {"sample_id", "item_code", "location_code", "target_date", "horizon_day", "top_n"},
+        ),
     ],
 )
 def test_stage_6_tools_have_closed_schemas(

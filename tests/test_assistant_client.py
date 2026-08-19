@@ -91,6 +91,47 @@ class FakeRepository:
             "data": [{"phase": kwargs.get("phase", "13.1"), "status": "SUCCESS"}],
         }
 
+    def get_model_metrics(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/model/metrics",
+                "source": "metrics.csv",
+                "records_returned": 1,
+            },
+            "data": [{"dataset": kwargs.get("dataset", "test"), "mae": "1.5"}],
+        }
+
+    def get_shap_global(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/shap/global",
+                "source": "shap_global.csv",
+                "records_returned": 1,
+            },
+            "data": [{"predictor": kwargs.get("predictor", "price")}],
+        }
+
+    def get_shap_horizons(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/shap/horizons",
+                "source": "shap_horizons.csv",
+                "records_returned": 1,
+            },
+            "data": [{"horizon_day": kwargs.get("horizon_day", 1), "predictor": "price"}],
+        }
+
+    def get_shap_local(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/shap/local",
+                "source": ["shap_sample.csv", "shap_local.csv"],
+                "records_returned": 1,
+                "local_shap_available": True,
+            },
+            "data": [{"sample_id": kwargs.get("sample_id", "S1"), "predictor": "price"}],
+        }
+
     def get_suggested_orders(self, **kwargs: Any) -> dict[str, Any]:
         return {
             "meta": {
@@ -234,7 +275,8 @@ def assistant_settings(**overrides: Any) -> Settings:
         "assistant_enabled_tools": (
             "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
             "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,"
-            "consultar_promociones,consultar_ejecuciones"
+            "consultar_promociones,consultar_ejecuciones,consultar_metricas_modelo,"
+            "consultar_shap_global,consultar_shap_horizontes,consultar_shap_local"
         ),
         "assistant_max_records": 25,
         "assistant_max_model_calls": 4,
@@ -308,13 +350,14 @@ def test_service_executes_complete_simulated_flow() -> None:
     db.execute.assert_called_once()
 
 
-def test_service_reports_a_planned_but_unimplemented_tool() -> None:
+def test_service_reports_an_implemented_but_disabled_tool() -> None:
     settings = assistant_settings(
         assistant_enabled=True,
         app_name="Test API",
+        assistant_enabled_tools="consultar_ventas",
     )
     service = AssistantService(MagicMock(), settings, openai_client=FakeOpenAI())
-    with pytest.raises(ToolUnavailableError, match="pendientes de migración"):
+    with pytest.raises(ToolUnavailableError, match="no implementadas o no habilitadas"):
         service.execute(AssistantRequest(question="Consulta las métricas MAE del modelo"))
 
 

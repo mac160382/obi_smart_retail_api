@@ -65,12 +65,14 @@ class Settings(BaseSettings):
     assistant_enabled_tools: str = (
         "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
         "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,"
-        "consultar_promociones,consultar_ejecuciones"
+        "consultar_promociones,consultar_ejecuciones,consultar_metricas_modelo,"
+        "consultar_shap_global,consultar_shap_horizontes,consultar_shap_local"
     )
     assistant_max_records: int = Field(default=25, ge=1, le=100)
     assistant_max_tool_calls: int = Field(default=6, ge=1, le=20)
     assistant_max_model_calls: int = Field(default=4, ge=2, le=10)
     assistant_default_forecast_origin: date | None = None
+    assistant_artifact_dir: Path = Path("resources/artifacts")
     assistant_execution_dir: Path = Path("resources/executions")
 
     model_config = SettingsConfigDict(

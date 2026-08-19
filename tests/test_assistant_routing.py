@@ -48,6 +48,10 @@ def test_unknown_explicit_tool_is_rejected() -> None:
         ("Consulta las promociones vigentes", "consultar_promociones"),
         ("Consulta el tiempo de entrega configurado", "consultar_parametros"),
         ("Consulta la última ejecución", "consultar_ejecuciones"),
+        ("Consulta las métricas MAE del modelo", "consultar_metricas_modelo"),
+        ("Explica SHAP global", "consultar_shap_global"),
+        ("Explica SHAP por horizonte", "consultar_shap_horizontes"),
+        ("Explica SHAP local", "consultar_shap_local"),
     ],
 )
 def test_stage_6_questions_route_to_expected_tool(question: str, tool: str) -> None:

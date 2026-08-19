@@ -274,3 +274,83 @@ def test_executions_repository_reports_missing_result_file(tmp_path: Path) -> No
         "available": False,
         "status": None,
     }
+
+
+def test_model_metrics_repository_filters_dataset_level_and_horizon(tmp_path: Path) -> None:
+    (tmp_path / "phase11_07_random_forest_metrics_cutoff_2026-06-22.csv").write_text(
+        "evaluation_level,horizon_day,mae\nperiod,2,1.5\nglobal,,2.0\n",
+        encoding="utf-8",
+    )
+    settings = Settings.model_construct(assistant_artifact_dir=tmp_path)
+    repository = AssistantQueryRepository(MagicMock(), settings)
+
+    result = repository.get_model_metrics(
+        dataset="validation",
+        evaluation_level="period",
+        horizon_day=2,
+        limit=5,
+    )
+
+    assert result["meta"]["endpoint"] == "/api/v1/model/metrics"
+    assert result["meta"]["source"].startswith("phase11_07")
+    assert result["meta"]["records_returned"] == 1
+    assert result["data"][0]["mae"] == "1.5"
+
+
+def test_shap_global_repository_returns_requested_top_predictors(tmp_path: Path) -> None:
+    (tmp_path / "phase12_shap_global_importance_cutoff_2026-06-22.csv").write_text(
+        "predictor,global_rank,mean_abs_shap\nprice,1,0.8\nstock,2,0.5\n",
+        encoding="utf-8",
+    )
+    settings = Settings.model_construct(assistant_artifact_dir=tmp_path)
+    repository = AssistantQueryRepository(MagicMock(), settings)
+
+    result = repository.get_shap_global(top_n=1)
+
+    assert result["meta"]["endpoint"] == "/api/v1/shap/global"
+    assert result["meta"]["records_returned"] == 1
+    assert result["data"][0]["predictor"] == "price"
+
+
+def test_shap_horizons_repository_limits_each_horizon(tmp_path: Path) -> None:
+    (tmp_path / "phase12_shap_importance_by_horizon_cutoff_2026-06-22.csv").write_text(
+        (
+            "horizon_day,predictor,horizon_rank\n"
+            "1,price,1\n1,stock,2\n2,promo,1\n2,calendar,2\n"
+        ),
+        encoding="utf-8",
+    )
+    settings = Settings.model_construct(assistant_artifact_dir=tmp_path)
+    repository = AssistantQueryRepository(MagicMock(), settings)
+
+    result = repository.get_shap_horizons(top_n=1)
+
+    assert result["meta"]["endpoint"] == "/api/v1/shap/horizons"
+    assert result["meta"]["records_returned"] == 2
+    assert [row["predictor"] for row in result["data"]] == ["price", "promo"]
+
+
+def test_shap_local_repository_supports_composite_key_and_rank(tmp_path: Path) -> None:
+    (tmp_path / "phase12_shap_local_contributions_cutoff_2026-06-22.csv").write_text(
+        (
+            "sample_id,item_code,location_code,target_date,horizon_day,local_rank,predictor\n"
+            "S1,101,13,2026-08-18,2,2,stock\n"
+            "S1,101,13,2026-08-18,2,1,price\n"
+            "S2,102,14,2026-08-19,3,1,promo\n"
+        ),
+        encoding="utf-8",
+    )
+    settings = Settings.model_construct(assistant_artifact_dir=tmp_path)
+    repository = AssistantQueryRepository(MagicMock(), settings)
+
+    result = repository.get_shap_local(
+        item_code=101,
+        location_code=13,
+        target_date=date(2026, 8, 18),
+        horizon_day=2,
+        top_n=2,
+    )
+
+    assert result["meta"]["endpoint"] == "/api/v1/shap/local"
+    assert result["meta"]["local_shap_available"] is True
+    assert [row["predictor"] for row in result["data"]] == ["price", "stock"]

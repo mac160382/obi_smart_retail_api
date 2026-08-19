@@ -62,7 +62,7 @@ class AssistantService:
             ]
             if unavailable:
                 raise ToolUnavailableError(
-                    "La consulta requiere funcionalidades pendientes de migración: "
+                    "La consulta requiere herramientas no implementadas o no habilitadas: "
                     + ", ".join(unavailable)
                     + "."
                 )

@@ -633,8 +633,8 @@ La primera etapa del Asistente está integrada y deshabilitada por defecto. Esta
 entrega incorpora el estado de salud, las diez preguntas de negocio, el
 enrutamiento local y las herramientas de consulta de pedidos sugeridos,
 pronósticos, ventas históricas, artículos, tiendas, inventario, parámetros,
-promociones y ejecuciones. Las herramientas analíticas restantes se reconocen como
-planificadas, pero no pueden ejecutarse todavía.
+promociones, ejecuciones, métricas del modelo y explicaciones SHAP globales,
+por horizonte y locales.
 
 Configuración:
 
@@ -643,11 +643,12 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.6-luna
 ASSISTANT_ENABLED=false
 ASSISTANT_REAL_LLM_ENABLED=false
-ASSISTANT_ENABLED_TOOLS=consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,consultar_promociones,consultar_ejecuciones
+ASSISTANT_ENABLED_TOOLS=consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,consultar_promociones,consultar_ejecuciones,consultar_metricas_modelo,consultar_shap_global,consultar_shap_horizontes,consultar_shap_local
 ASSISTANT_MAX_RECORDS=25
 ASSISTANT_MAX_TOOL_CALLS=6
 ASSISTANT_MAX_MODEL_CALLS=4
 ASSISTANT_DEFAULT_FORECAST_ORIGIN=2026-06-24
+ASSISTANT_ARTIFACT_DIR=resources/artifacts
 ASSISTANT_EXECUTION_DIR=resources/executions
 ```
 
@@ -655,6 +656,8 @@ ASSISTANT_EXECUTION_DIR=resources/executions
 que es la fuente vigente de tiempos de entrega, periodos de revisión, lotes mínimos
 y niveles de servicio en este API. `consultar_ejecuciones` lee exclusivamente el
 manifiesto y los archivos de resultados ubicados en `ASSISTANT_EXECUTION_DIR`.
+Las métricas y explicaciones leen exclusivamente CSV previamente calculados desde
+`ASSISTANT_ARTIFACT_DIR`; estas herramientas no entrenan ni recalculan modelos.
 
 Puntos de acceso:
 
