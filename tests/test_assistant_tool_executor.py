@@ -57,6 +57,20 @@ class FakeRepository:
             "data": [{"item": "A", "event_code": "PROMO-1"}],
         }
 
+    def get_parameters(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {"source": "public.g2_maestro_inventario_lacteos", "records_returned": 1},
+            "data": [{"item": "A", "lead_time_days": 2}],
+        }
+
+    def get_executions(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {"source": ["phase13_1.txt"], "records_returned": 1},
+            "data": [{"phase": kwargs.get("phase"), "status": "SUCCESS"}],
+        }
+
     def get_sales(self, **kwargs: Any) -> dict[str, Any]:
         self.arguments = kwargs
         return {
@@ -84,7 +98,8 @@ def assistant_settings(**overrides: Any) -> Settings:
     values: dict[str, Any] = {
         "assistant_enabled_tools": (
             "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
-            "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_promociones"
+            "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,"
+            "consultar_promociones,consultar_ejecuciones"
         ),
         "assistant_max_records": 25,
     }
@@ -253,3 +268,33 @@ def test_executor_normalizes_stage_6_tools(
     assert trace.tool == tool
     assert trace.records_returned == 1
     assert payload["data"]
+
+
+def test_executor_normalizes_parameters_filters() -> None:
+    repository = FakeRepository()
+    executor = ToolExecutor(repository, assistant_settings(assistant_max_records=6))
+
+    payload, trace = executor.execute(
+        "consultar_parametros",
+        {"item": "A", "location": "13", "supplier": "101", "limit": 50},
+    )
+
+    assert repository.arguments == {
+        "item": "A",
+        "location": 13,
+        "supplier": 101,
+        "limit": 6,
+    }
+    assert trace.tool == "consultar_parametros"
+    assert payload["data"][0]["lead_time_days"] == 2
+
+
+def test_executor_does_not_inject_limit_into_executions() -> None:
+    repository = FakeRepository()
+    executor = ToolExecutor(repository, assistant_settings())
+
+    payload, trace = executor.execute("consultar_ejecuciones", {"phase": "13.1"})
+
+    assert repository.arguments == {"phase": "13.1"}
+    assert trace.tool == "consultar_ejecuciones"
+    assert payload["data"][0]["status"] == "SUCCESS"

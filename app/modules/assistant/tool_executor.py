@@ -56,6 +56,17 @@ class AssistantDataReader(Protocol):
         limit: int = 10,
     ) -> dict[str, Any]: ...
 
+    def get_parameters(
+        self,
+        *,
+        item: str | None = None,
+        location: int | None = None,
+        supplier: int | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]: ...
+
+    def get_executions(self, *, phase: str | None = None) -> dict[str, Any]: ...
+
     def get_sales(
         self,
         *,
@@ -144,13 +155,14 @@ class ToolExecutor:
         for key, value in DEFAULT_ARGUMENTS[name].items():
             clean.setdefault(key, value)
 
-        clean["limit"] = min(
-            max(int(clean.get("limit", 5)), 1),
-            self.settings.assistant_max_records,
-        )
+        if "limit" in allowed:
+            clean["limit"] = min(
+                max(int(clean.get("limit", 5)), 1),
+                self.settings.assistant_max_records,
+            )
         if "offset" in allowed:
             clean["offset"] = min(max(int(clean.get("offset", 0)), 0), 1_000_000)
-        for field in ("itemtype", "familia_cod", "location", "estado"):
+        for field in ("itemtype", "familia_cod", "location", "estado", "supplier"):
             if field in clean:
                 clean[field] = int(clean[field])
         if name == "consultar_pronosticos":
@@ -208,7 +220,9 @@ class ToolExecutor:
             "consultar_tiendas": self.repository.get_stores,
             "consultar_ventas": self.repository.get_sales,
             "consultar_inventario": self.repository.get_inventory,
+            "consultar_parametros": self.repository.get_parameters,
             "consultar_promociones": self.repository.get_promotions,
+            "consultar_ejecuciones": self.repository.get_executions,
         }
         payload = handlers[name](**normalized)
         meta = payload.get("meta", {})

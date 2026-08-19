@@ -1,4 +1,5 @@
 from datetime import date
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -199,3 +200,77 @@ def test_promotions_repository_filters_active_date() -> None:
     assert "g2_lacteos_promociones_vigentes.fin" in query
     assert result["meta"]["endpoint"] == "/api/v1/promotions"
     assert result["meta"]["source"] == "public.g2_lacteos_promociones_vigentes"
+
+
+def test_parameters_repository_uses_inventory_operational_fields() -> None:
+    db = MagicMock()
+    db.execute.return_value.mappings.return_value.all.return_value = [
+        {
+            "item": "A",
+            "location": "13",
+            "supplier": "101",
+            "lead_time_days": 2,
+            "review_period_days": 7,
+        }
+    ]
+    settings = Settings.model_construct(
+        inventory_master_schema="public",
+        inventory_master_table="g2_maestro_inventario_lacteos",
+    )
+    repository = AssistantQueryRepository(db, settings)
+
+    result = repository.get_parameters(item="A", location=13, supplier=101, limit=5)
+
+    query = str(db.execute.call_args.args[0])
+    assert query.lstrip().startswith("SELECT")
+    assert "g2_maestro_inventario_lacteos.lead_time_days" in query
+    assert "g2_maestro_inventario_lacteos.review_period_days" in query
+    assert "g2_maestro_inventario_lacteos.minimum_handling_quantity_units" in query
+    assert result["meta"]["endpoint"] == "/api/v1/parameters"
+    assert result["meta"]["source"] == "public.g2_maestro_inventario_lacteos"
+    assert result["meta"]["records_returned"] == 1
+
+
+def test_executions_repository_reads_manifest_and_filters_phase(tmp_path: Path) -> None:
+    (tmp_path / "execution_manifest.json").write_text(
+        """[
+          {"phase":"13.1","process":"Inventario","filename":"phase13_1.txt"},
+          {"phase":"13.2","process":"Validación","filename":"missing.txt"}
+        ]""",
+        encoding="utf-8",
+    )
+    (tmp_path / "phase13_1.txt").write_text(
+        "Status: SUCCESS\nInicio UTC: 2026-08-18T10:00:00Z\nFin UTC: 2026-08-18T10:01:00Z\n",
+        encoding="utf-8",
+    )
+    settings = Settings.model_construct(assistant_execution_dir=tmp_path)
+    repository = AssistantQueryRepository(MagicMock(), settings)
+
+    result = repository.get_executions(phase="13.1")
+
+    assert result["meta"]["endpoint"] == "/api/v1/executions"
+    assert result["meta"]["source"] == ["phase13_1.txt", "missing.txt"]
+    assert result["meta"]["records_returned"] == 1
+    assert result["data"][0]["available"] is True
+    assert result["data"][0]["status"] == "SUCCESS"
+    assert result["data"][0]["started"] == "2026-08-18T10:00:00Z"
+
+
+def test_executions_repository_reports_missing_result_file(tmp_path: Path) -> None:
+    (tmp_path / "execution_manifest.json").write_text(
+        '[{"phase":"13.2","process":"Validación","filename":"missing.txt"}]',
+        encoding="utf-8",
+    )
+    settings = Settings.model_construct(assistant_execution_dir=tmp_path)
+    repository = AssistantQueryRepository(MagicMock(), settings)
+
+    result = repository.get_executions()
+
+    assert result["meta"]["records_returned"] == 1
+    assert result["data"][0] == {
+        "phase": "13.2",
+        "process": "Validación",
+        "source_file": "missing.txt",
+        "available": False,
+        "status": None,
+    }

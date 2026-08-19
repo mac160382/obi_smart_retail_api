@@ -18,7 +18,9 @@ def test_assistant_health_is_available_without_authentication() -> None:
     assert payload["status"] == "disabled"
     assert payload["implemented_tools"] == [
         "consultar_articulos",
+        "consultar_ejecuciones",
         "consultar_inventario",
+        "consultar_parametros",
         "consultar_pedidos_sugeridos",
         "consultar_promociones",
         "consultar_pronosticos",
@@ -79,7 +81,8 @@ def test_authenticated_user_can_list_questions(monkeypatch) -> None:
         settings,
         "assistant_enabled_tools",
         "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
-        "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_promociones",
+        "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,"
+        "consultar_promociones,consultar_ejecuciones",
     )
     authenticated = authenticated_client()
     try:
@@ -159,7 +162,7 @@ def test_unimplemented_tool_returns_conflict_before_calling_llm(monkeypatch) -> 
     try:
         response = authenticated.post(
             "/api/v1/assistant-light/query",
-            json={"question": "Consulta el tiempo de entrega configurado"},
+            json={"question": "Consulta las métricas MAE del modelo"},
         )
     finally:
         clear_overrides()

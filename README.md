@@ -632,8 +632,8 @@ o un rol con permiso para reasignar el propietario.
 La primera etapa del Asistente está integrada y deshabilitada por defecto. Esta
 entrega incorpora el estado de salud, las diez preguntas de negocio, el
 enrutamiento local y las herramientas de consulta de pedidos sugeridos,
-pronósticos, ventas históricas, artículos, tiendas, inventario y promociones.
-Las herramientas analíticas y de seguimiento restantes se reconocen como
+pronósticos, ventas históricas, artículos, tiendas, inventario, parámetros,
+promociones y ejecuciones. Las herramientas analíticas restantes se reconocen como
 planificadas, pero no pueden ejecutarse todavía.
 
 Configuración:
@@ -643,12 +643,18 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.6-luna
 ASSISTANT_ENABLED=false
 ASSISTANT_REAL_LLM_ENABLED=false
-ASSISTANT_ENABLED_TOOLS=consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,consultar_tiendas,consultar_ventas,consultar_inventario,consultar_promociones
+ASSISTANT_ENABLED_TOOLS=consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,consultar_promociones,consultar_ejecuciones
 ASSISTANT_MAX_RECORDS=25
 ASSISTANT_MAX_TOOL_CALLS=6
 ASSISTANT_MAX_MODEL_CALLS=4
 ASSISTANT_DEFAULT_FORECAST_ORIGIN=2026-06-24
+ASSISTANT_EXECUTION_DIR=resources/executions
 ```
+
+`consultar_parametros` utiliza los campos operativos del maestro de inventario,
+que es la fuente vigente de tiempos de entrega, periodos de revisión, lotes mínimos
+y niveles de servicio en este API. `consultar_ejecuciones` lee exclusivamente el
+manifiesto y los archivos de resultados ubicados en `ASSISTANT_EXECUTION_DIR`.
 
 Puntos de acceso:
 

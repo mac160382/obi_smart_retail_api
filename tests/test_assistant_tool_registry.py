@@ -12,10 +12,12 @@ def test_database_query_tools_are_implemented() -> None:
         "consultar_articulos",
         "consultar_inventario",
         "consultar_pedidos_sugeridos",
+        "consultar_parametros",
         "consultar_promociones",
         "consultar_pronosticos",
         "consultar_tiendas",
         "consultar_ventas",
+        "consultar_ejecuciones",
     }
 
 
@@ -33,8 +35,8 @@ def test_forecast_response_tool_has_closed_parameter_schema() -> None:
 def test_planned_tool_cannot_execute_before_implementation() -> None:
     with pytest.raises(ValueError, match="no implementada"):
         validate_selected_tools(
-            ["consultar_parametros"],
-            enabled_tools=["consultar_parametros"],
+            ["consultar_metricas_modelo"],
+            enabled_tools=["consultar_metricas_modelo"],
         )
 
 
@@ -61,7 +63,9 @@ def test_sales_response_tool_exposes_supported_aggregations() -> None:
             "consultar_inventario",
             {"item_code", "location_code", "proveedor_code", "estado_articulo", "limit"},
         ),
+        ("consultar_parametros", {"item", "location", "supplier", "limit"}),
         ("consultar_promociones", {"item", "event_code", "status", "active_on", "limit"}),
+        ("consultar_ejecuciones", {"phase"}),
     ],
 )
 def test_stage_6_tools_have_closed_schemas(

@@ -26,7 +26,9 @@ IMPLEMENTED_TOOL_NAMES = frozenset(
         "consultar_tiendas",
         "consultar_ventas",
         "consultar_inventario",
+        "consultar_parametros",
         "consultar_promociones",
+        "consultar_ejecuciones",
     }
 )
 
@@ -37,7 +39,9 @@ DEFAULT_ARGUMENTS: dict[str, dict[str, Any]] = {
     "consultar_tiendas": {"limit": 10},
     "consultar_ventas": {"aggregation": "day", "limit": 10},
     "consultar_inventario": {"limit": 10},
+    "consultar_parametros": {"limit": 10},
     "consultar_promociones": {"limit": 10},
+    "consultar_ejecuciones": {},
 }
 
 TOOL_ENDPOINTS = {
@@ -47,7 +51,9 @@ TOOL_ENDPOINTS = {
     "consultar_tiendas": "/api/v1/stores",
     "consultar_ventas": "/api/v1/sales",
     "consultar_inventario": "/api/v1/inventory",
+    "consultar_parametros": "/api/v1/parameters",
     "consultar_promociones": "/api/v1/promotions",
+    "consultar_ejecuciones": "/api/v1/executions",
 }
 
 TOOL_DESCRIPTIONS = {
@@ -61,7 +67,9 @@ TOOL_DESCRIPTIONS = {
     "consultar_tiendas": "Consulta el maestro de tiendas.",
     "consultar_ventas": ("Consulta ventas observadas con detalle o agregación diaria o semanal."),
     "consultar_inventario": "Consulta existencias, tránsito y atributos de inventario.",
+    "consultar_parametros": "Consulta tiempos de entrega, revisión y parámetros de reposición.",
     "consultar_promociones": "Consulta promociones vigentes y la variación esperada.",
+    "consultar_ejecuciones": "Consulta el estado disponible de ejecuciones registradas.",
 }
 
 
@@ -161,6 +169,16 @@ TOOL_PARAMETERS: dict[str, dict[str, Any]] = {
         },
         "additionalProperties": False,
     },
+    "consultar_parametros": {
+        "type": "object",
+        "properties": {
+            "item": _nullable("string", "Código del artículo."),
+            "location": _nullable("integer", "Código de tienda."),
+            "supplier": _nullable("integer", "Código de proveedor."),
+            "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
+        },
+        "additionalProperties": False,
+    },
     "consultar_promociones": {
         "type": "object",
         "properties": {
@@ -169,6 +187,13 @@ TOOL_PARAMETERS: dict[str, dict[str, Any]] = {
             "status": _nullable("string", "Estado de la promoción."),
             "active_on": _nullable("string", "Fecha YYYY-MM-DD dentro de la promoción."),
             "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
+        },
+        "additionalProperties": False,
+    },
+    "consultar_ejecuciones": {
+        "type": "object",
+        "properties": {
+            "phase": _nullable("string", "Fase que se desea consultar."),
         },
         "additionalProperties": False,
     },

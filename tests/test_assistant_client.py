@@ -71,6 +71,26 @@ class FakeRepository:
             "data": [{"item": kwargs.get("item", "A"), "event_code": "PROMO-1"}],
         }
 
+    def get_parameters(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/parameters",
+                "source": "public.g2_maestro_inventario_lacteos",
+                "records_returned": 1,
+            },
+            "data": [{"item": kwargs.get("item", "A"), "lead_time_days": 2}],
+        }
+
+    def get_executions(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/executions",
+                "source": ["phase13_1.txt"],
+                "records_returned": 1,
+            },
+            "data": [{"phase": kwargs.get("phase", "13.1"), "status": "SUCCESS"}],
+        }
+
     def get_suggested_orders(self, **kwargs: Any) -> dict[str, Any]:
         return {
             "meta": {
@@ -213,7 +233,8 @@ def assistant_settings(**overrides: Any) -> Settings:
         "assistant_real_llm_enabled": False,
         "assistant_enabled_tools": (
             "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
-            "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_promociones"
+            "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,"
+            "consultar_promociones,consultar_ejecuciones"
         ),
         "assistant_max_records": 25,
         "assistant_max_model_calls": 4,
@@ -294,7 +315,7 @@ def test_service_reports_a_planned_but_unimplemented_tool() -> None:
     )
     service = AssistantService(MagicMock(), settings, openai_client=FakeOpenAI())
     with pytest.raises(ToolUnavailableError, match="pendientes de migración"):
-        service.execute(AssistantRequest(question="Consulta el tiempo de entrega configurado"))
+        service.execute(AssistantRequest(question="Consulta las métricas MAE del modelo"))
 
 
 def test_forecast_function_call_and_final_response_with_simulated_openai() -> None:

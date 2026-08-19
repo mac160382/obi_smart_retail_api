@@ -46,6 +46,8 @@ def test_unknown_explicit_tool_is_rejected() -> None:
         ("Lista las tiendas disponibles", "consultar_tiendas"),
         ("Consulta el stock del inventario", "consultar_inventario"),
         ("Consulta las promociones vigentes", "consultar_promociones"),
+        ("Consulta el tiempo de entrega configurado", "consultar_parametros"),
+        ("Consulta la última ejecución", "consultar_ejecuciones"),
     ],
 )
 def test_stage_6_questions_route_to_expected_tool(question: str, tool: str) -> None:

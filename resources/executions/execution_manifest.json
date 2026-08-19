@@ -1,0 +1,47 @@
+[
+  {
+    "phase": "11",
+    "process": "Cierre del modelo final",
+    "filename": "phase11_10_phase_closure_results_cutoff_2026-06-22.txt"
+  },
+  {
+    "phase": "12",
+    "process": "Explicabilidad SHAP",
+    "filename": "phase12_shap_results_cutoff_2026-06-22.txt"
+  },
+  {
+    "phase": "13.1",
+    "process": "Inventario de fuentes",
+    "filename": "phase13_01_api_source_inventory_results_cutoff_2026-06-22.txt"
+  },
+  {
+    "phase": "13.2",
+    "process": "Validación de acceso de solo lectura",
+    "filename": "phase13_02_readonly_role_validation_results_cutoff_2026-06-22.txt"
+  },
+  {
+    "phase": "13.3",
+    "process": "Validación funcional del API",
+    "filename": "phase13_03_api_validation_results.txt"
+  },
+  {
+    "phase": "13.4",
+    "process": "Integración inicial del modelo de lenguaje",
+    "filename": "phase13_04_llm_validation_results.txt"
+  },
+  {
+    "phase": "13.5",
+    "process": "Optimización del consumo",
+    "filename": "phase13_05_llm_optimization_results.txt"
+  },
+  {
+    "phase": "13.7",
+    "process": "Validación del historial",
+    "filename": "phase13_07_executions_validation_results.txt"
+  },
+  {
+    "phase": "15 base",
+    "process": "Integración operativa base",
+    "filename": "phase15_base_08_integration_evidence_origin_2026-06-24_run_20260816T131140537677Z.txt"
+  }
+]

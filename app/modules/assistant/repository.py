@@ -1,4 +1,6 @@
-from datetime import date
+import json
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any, Literal
 
 from sqlalchemy import Date as SQLDate
@@ -157,6 +159,130 @@ class AssistantQueryRepository:
                 "records_returned": len(rows),
             },
             "data": rows,
+        }
+
+    def get_parameters(
+        self,
+        *,
+        item: str | None = None,
+        location: int | None = None,
+        supplier: int | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        inventory = g2_maestro_inventario_lacteos
+        conditions: list[Any] = []
+        if item is not None:
+            conditions.append(inventory.c.item_code == item)
+        if location is not None:
+            conditions.append(inventory.c.location_code == str(location))
+        if supplier is not None:
+            conditions.append(inventory.c.proveedor_code == str(supplier))
+
+        query = (
+            select(
+                inventory.c.item_code.label("item"),
+                inventory.c.description_item_code.label("descripcion_item"),
+                inventory.c.location_code.label("location"),
+                inventory.c.description_location_code.label("descripcion_tienda"),
+                inventory.c.proveedor_code.label("supplier"),
+                inventory.c.description_proveedor.label("descripcion_proveedor"),
+                inventory.c.service_level,
+                inventory.c.frecuencia_pedido,
+                inventory.c.minimum_handling_quantity_units,
+                inventory.c.lead_time_days,
+                inventory.c.review_period_days,
+            )
+            .where(*conditions)
+            .order_by(inventory.c.item_code, inventory.c.location_code)
+            .limit(limit)
+        )
+        rows = [dict(row) for row in self.db.execute(query).mappings().all()]
+        filters = {
+            "item": item,
+            "location": location,
+            "supplier": supplier,
+            "limit": limit,
+        }
+        return {
+            "meta": {
+                "endpoint": "/api/v1/parameters",
+                "source": (
+                    f"{self.settings.inventory_master_schema}."
+                    f"{self.settings.inventory_master_table}"
+                ),
+                "filters_applied": {
+                    key: value for key, value in filters.items() if value is not None
+                },
+                "records_returned": len(rows),
+            },
+            "data": rows,
+        }
+
+    @staticmethod
+    def _execution_summary(path: Path, item: dict[str, Any]) -> dict[str, Any]:
+        base = {
+            "phase": item.get("phase"),
+            "process": item.get("process"),
+            "source_file": path.name,
+        }
+        if not path.is_file():
+            return {**base, "available": False, "status": None}
+
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+        def value_for(prefix: str) -> str | None:
+            return next(
+                (line.split(":", 1)[1].strip() for line in lines if line.startswith(prefix)),
+                None,
+            )
+
+        return {
+            **base,
+            "available": True,
+            "status": value_for("Status:"),
+            "started": value_for("Inicio UTC:"),
+            "finished": value_for("Fin UTC:"),
+            "modified_utc": datetime.fromtimestamp(
+                path.stat().st_mtime,
+                tz=UTC,
+            ).isoformat(),
+        }
+
+    def get_executions(self, *, phase: str | None = None) -> dict[str, Any]:
+        execution_dir = self.settings.assistant_execution_dir.resolve()
+        manifest_path = execution_dir / "execution_manifest.json"
+        manifest: list[Any] = []
+        if manifest_path.is_file():
+            parsed = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(parsed, list):
+                raise ValueError("execution_manifest.json debe contener una lista.")
+            manifest = parsed
+
+        data: list[dict[str, Any]] = []
+        sources: list[str] = []
+        for raw_item in manifest:
+            if not isinstance(raw_item, dict):
+                raise ValueError("Cada entrada del manifiesto de ejecuciones debe ser un objeto.")
+            item = dict(raw_item)
+            filename = str(item.get("filename", "")).strip()
+            if not filename:
+                continue
+            path = (execution_dir / filename).resolve()
+            if not path.is_relative_to(execution_dir):
+                raise ValueError("El manifiesto contiene una ruta fuera del directorio autorizado.")
+            sources.append(filename)
+            data.append(self._execution_summary(path, item))
+
+        if phase is not None:
+            data = [row for row in data if str(row.get("phase")) == phase]
+        return {
+            "meta": {
+                "endpoint": "/api/v1/executions",
+                "source": sources,
+                "filters_applied": {"phase": phase} if phase is not None else {},
+                "records_returned": len(data),
+            },
+            "data": data,
         }
 
     def get_promotions(

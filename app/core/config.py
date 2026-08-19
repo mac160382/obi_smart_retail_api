@@ -1,5 +1,6 @@
 from datetime import date
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -63,12 +64,14 @@ class Settings(BaseSettings):
     assistant_real_llm_enabled: bool = False
     assistant_enabled_tools: str = (
         "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
-        "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_promociones"
+        "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_parametros,"
+        "consultar_promociones,consultar_ejecuciones"
     )
     assistant_max_records: int = Field(default=25, ge=1, le=100)
     assistant_max_tool_calls: int = Field(default=6, ge=1, le=20)
     assistant_max_model_calls: int = Field(default=4, ge=2, le=10)
     assistant_default_forecast_origin: date | None = None
+    assistant_execution_dir: Path = Path("resources/executions")
 
     model_config = SettingsConfigDict(
         env_file=".env",
