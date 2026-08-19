@@ -37,3 +37,17 @@ def test_unknown_question_is_rejected() -> None:
 def test_unknown_explicit_tool_is_rejected() -> None:
     with pytest.raises(ValueError, match="no autorizada"):
         resolve_route("Consulta", explicit_tools=["ejecutar_sql"])
+
+
+@pytest.mark.parametrize(
+    ("question", "tool"),
+    [
+        ("Lista los artículos existentes", "consultar_articulos"),
+        ("Lista las tiendas disponibles", "consultar_tiendas"),
+        ("Consulta el stock del inventario", "consultar_inventario"),
+        ("Consulta las promociones vigentes", "consultar_promociones"),
+    ],
+)
+def test_stage_6_questions_route_to_expected_tool(question: str, tool: str) -> None:
+    decision = deterministic_route(question)
+    assert decision.tools == (tool,)

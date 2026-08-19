@@ -17,8 +17,12 @@ def test_assistant_health_is_available_without_authentication() -> None:
     payload = response.json()
     assert payload["status"] == "disabled"
     assert payload["implemented_tools"] == [
+        "consultar_articulos",
+        "consultar_inventario",
         "consultar_pedidos_sugeridos",
+        "consultar_promociones",
         "consultar_pronosticos",
+        "consultar_tiendas",
         "consultar_ventas",
     ]
     assert payload["real_llm_enabled"] is False
@@ -74,7 +78,8 @@ def test_authenticated_user_can_list_questions(monkeypatch) -> None:
     monkeypatch.setattr(
         settings,
         "assistant_enabled_tools",
-        "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_ventas",
+        "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
+        "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_promociones",
     )
     authenticated = authenticated_client()
     try:
@@ -84,7 +89,7 @@ def test_authenticated_user_can_list_questions(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["records_returned"] == 10
-    assert sum(1 for row in payload["data"] if row["available"]) == 8
+    assert sum(1 for row in payload["data"] if row["available"]) == 9
 
 
 def test_authenticated_user_can_preview_forecast_routing() -> None:
@@ -154,7 +159,7 @@ def test_unimplemented_tool_returns_conflict_before_calling_llm(monkeypatch) -> 
     try:
         response = authenticated.post(
             "/api/v1/assistant-light/query",
-            json={"question": "Consulta las promociones vigentes"},
+            json={"question": "Consulta el tiempo de entrega configurado"},
         )
     finally:
         clear_overrides()

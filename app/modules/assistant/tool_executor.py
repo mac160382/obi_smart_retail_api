@@ -15,6 +15,47 @@ from app.modules.assistant.tool_registry import (
 
 
 class AssistantDataReader(Protocol):
+    def get_items(
+        self,
+        *,
+        item: str | None = None,
+        descripcion: str | None = None,
+        itemtype: int | None = None,
+        familia_cod: int | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]: ...
+
+    def get_stores(
+        self,
+        *,
+        location: int | None = None,
+        descripcion: str | None = None,
+        tipo_centro: str | None = None,
+        region: str | None = None,
+        estado: int | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]: ...
+
+    def get_inventory(
+        self,
+        *,
+        item_code: str | None = None,
+        location_code: str | None = None,
+        proveedor_code: str | None = None,
+        estado_articulo: str | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]: ...
+
+    def get_promotions(
+        self,
+        *,
+        item: str | None = None,
+        event_code: str | None = None,
+        status: str | None = None,
+        active_on: date | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]: ...
+
     def get_sales(
         self,
         *,
@@ -109,9 +150,13 @@ class ToolExecutor:
         )
         if "offset" in allowed:
             clean["offset"] = min(max(int(clean.get("offset", 0)), 0), 1_000_000)
-        for field in ("item_code", "location", "location_code"):
+        for field in ("itemtype", "familia_cod", "location", "estado"):
             if field in clean:
                 clean[field] = int(clean[field])
+        if name == "consultar_pronosticos":
+            for field in ("item_code", "location_code"):
+                if field in clean:
+                    clean[field] = int(clean[field])
         if "horizon_day" in clean:
             clean["horizon_day"] = min(max(int(clean["horizon_day"]), 1), 7)
         for field in (
@@ -121,6 +166,7 @@ class ToolExecutor:
             "target_date_to",
             "date_from",
             "date_to",
+            "active_on",
         ):
             if field in clean:
                 clean[field] = self._optional_date(clean[field], field)
@@ -158,7 +204,11 @@ class ToolExecutor:
         handlers: dict[str, Callable[..., dict[str, Any]]] = {
             "consultar_pronosticos": self.repository.get_forecasts,
             "consultar_pedidos_sugeridos": self.repository.get_suggested_orders,
+            "consultar_articulos": self.repository.get_items,
+            "consultar_tiendas": self.repository.get_stores,
             "consultar_ventas": self.repository.get_sales,
+            "consultar_inventario": self.repository.get_inventory,
+            "consultar_promociones": self.repository.get_promotions,
         }
         payload = handlers[name](**normalized)
         meta = payload.get("meta", {})

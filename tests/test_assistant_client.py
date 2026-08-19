@@ -31,6 +31,46 @@ class FakeRepository:
             ],
         }
 
+    def get_items(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/items",
+                "source": "public.lacteos_maestro_items",
+                "records_returned": 1,
+            },
+            "data": [{"item": kwargs.get("item", "A"), "descripcion": "Leche"}],
+        }
+
+    def get_stores(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/stores",
+                "source": "public.lacteos_maestro_tiendas",
+                "records_returned": 1,
+            },
+            "data": [{"location": kwargs.get("location", 13), "descripcion": "Centro"}],
+        }
+
+    def get_inventory(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/inventory",
+                "source": "public.g2_maestro_inventario_lacteos",
+                "records_returned": 1,
+            },
+            "data": [{"item_code": kwargs.get("item_code", "A"), "current_stock_units": 8}],
+        }
+
+    def get_promotions(self, **kwargs: Any) -> dict[str, Any]:
+        return {
+            "meta": {
+                "endpoint": "/api/v1/promotions",
+                "source": "public.g2_lacteos_promociones_vigentes",
+                "records_returned": 1,
+            },
+            "data": [{"item": kwargs.get("item", "A"), "event_code": "PROMO-1"}],
+        }
+
     def get_suggested_orders(self, **kwargs: Any) -> dict[str, Any]:
         return {
             "meta": {
@@ -172,7 +212,8 @@ def assistant_settings(**overrides: Any) -> Settings:
         "openai_model": "test-model",
         "assistant_real_llm_enabled": False,
         "assistant_enabled_tools": (
-            "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_ventas"
+            "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
+            "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_promociones"
         ),
         "assistant_max_records": 25,
         "assistant_max_model_calls": 4,
@@ -253,7 +294,7 @@ def test_service_reports_a_planned_but_unimplemented_tool() -> None:
     )
     service = AssistantService(MagicMock(), settings, openai_client=FakeOpenAI())
     with pytest.raises(ToolUnavailableError, match="pendientes de migración"):
-        service.execute(AssistantRequest(question="Consulta las promociones vigentes"))
+        service.execute(AssistantRequest(question="Consulta el tiempo de entrega configurado"))
 
 
 def test_forecast_function_call_and_final_response_with_simulated_openai() -> None:

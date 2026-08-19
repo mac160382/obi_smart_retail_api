@@ -89,3 +89,113 @@ def test_sales_repository_supports_each_aggregation(
     assert result["meta"]["source"] == "public.lacteos_ventas_historicas"
     assert result["meta"]["aggregation"] == aggregation
     assert result["meta"]["records_returned"] == 1
+
+
+def test_items_repository_applies_catalog_filters() -> None:
+    db = MagicMock()
+    db.execute.return_value.mappings.return_value.all.return_value = [
+        {"item": "A", "descripcion": "Leche", "itemtype": 1, "familia_cod": 10}
+    ]
+    settings = Settings.model_construct(
+        items_master_schema="public",
+        items_master_table="lacteos_maestro_items",
+    )
+    repository = AssistantQueryRepository(db, settings)
+
+    result = repository.get_items(
+        item="A",
+        descripcion="Leche",
+        itemtype=1,
+        familia_cod=10,
+        limit=5,
+    )
+
+    query = str(db.execute.call_args.args[0])
+    assert query.lstrip().startswith("SELECT")
+    assert "lacteos_maestro_items.descripcion" in query
+    assert "lower(" in query
+    assert result["meta"]["endpoint"] == "/api/v1/items"
+    assert result["meta"]["source"] == "public.lacteos_maestro_items"
+    assert result["meta"]["records_returned"] == 1
+
+
+def test_stores_repository_applies_catalog_filters() -> None:
+    db = MagicMock()
+    db.execute.return_value.mappings.return_value.all.return_value = [
+        {"location": 13, "descripcion": "Centro", "region": "Norte"}
+    ]
+    settings = Settings.model_construct(
+        stores_master_schema="public",
+        stores_master_table="lacteos_maestro_tiendas",
+    )
+    repository = AssistantQueryRepository(db, settings)
+
+    result = repository.get_stores(
+        location=13,
+        descripcion="Centro",
+        tipo_centro="Tienda",
+        region="Norte",
+        estado=1,
+        limit=5,
+    )
+
+    query = str(db.execute.call_args.args[0])
+    assert query.lstrip().startswith("SELECT")
+    assert "lacteos_maestro_tiendas.location" in query
+    assert "lacteos_maestro_tiendas.region" in query
+    assert result["meta"]["endpoint"] == "/api/v1/stores"
+    assert result["meta"]["source"] == "public.lacteos_maestro_tiendas"
+
+
+def test_inventory_repository_applies_operational_filters() -> None:
+    db = MagicMock()
+    db.execute.return_value.mappings.return_value.all.return_value = [
+        {"item_code": "A", "location_code": "13", "current_stock_units": 8}
+    ]
+    settings = Settings.model_construct(
+        inventory_master_schema="public",
+        inventory_master_table="g2_maestro_inventario_lacteos",
+    )
+    repository = AssistantQueryRepository(db, settings)
+
+    result = repository.get_inventory(
+        item_code="A",
+        location_code="13",
+        proveedor_code="P1",
+        estado_articulo="Activo",
+        limit=5,
+    )
+
+    query = str(db.execute.call_args.args[0])
+    assert query.lstrip().startswith("SELECT")
+    assert "g2_maestro_inventario_lacteos.item_code" in query
+    assert "g2_maestro_inventario_lacteos.proveedor_code" in query
+    assert result["meta"]["endpoint"] == "/api/v1/inventory"
+    assert result["meta"]["source"] == "public.g2_maestro_inventario_lacteos"
+
+
+def test_promotions_repository_filters_active_date() -> None:
+    db = MagicMock()
+    db.execute.return_value.mappings.return_value.all.return_value = [
+        {"item": "A", "event_code": "PROMO-1", "status": "Activa"}
+    ]
+    settings = Settings.model_construct(
+        current_promotions_schema="public",
+        current_promotions_table="g2_lacteos_promociones_vigentes",
+    )
+    repository = AssistantQueryRepository(db, settings)
+
+    result = repository.get_promotions(
+        item="A",
+        event_code="PROMO-1",
+        status="Activa",
+        active_on=date(2026, 8, 18),
+        limit=5,
+    )
+
+    query = str(db.execute.call_args.args[0])
+    assert query.lstrip().startswith("SELECT")
+    assert "g2_lacteos_promociones_vigentes.inicio" in query
+    assert "g2_lacteos_promociones_vigentes.fin" in query
+    assert result["meta"]["endpoint"] == "/api/v1/promotions"
+    assert result["meta"]["source"] == "public.g2_lacteos_promociones_vigentes"

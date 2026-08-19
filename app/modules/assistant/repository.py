@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.modules.imports.models import (
+    g2_lacteos_promociones_vigentes,
+    g2_maestro_inventario_lacteos,
+    lacteos_maestro_items,
+    lacteos_maestro_tiendas,
     lacteos_ventas_historicas,
     pedido_sugerido,
     pronostico,
@@ -17,6 +21,194 @@ class AssistantQueryRepository:
     def __init__(self, db: Session, settings: Settings) -> None:
         self.db = db
         self.settings = settings
+
+    def get_items(
+        self,
+        *,
+        item: str | None = None,
+        descripcion: str | None = None,
+        itemtype: int | None = None,
+        familia_cod: int | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        items = lacteos_maestro_items
+        conditions: list[Any] = []
+        if item is not None:
+            conditions.append(items.c.item == item)
+        if descripcion is not None:
+            conditions.append(items.c.descripcion.ilike(f"%{descripcion}%"))
+        if itemtype is not None:
+            conditions.append(items.c.itemtype == itemtype)
+        if familia_cod is not None:
+            conditions.append(items.c.familia_cod == familia_cod)
+
+        query = select(*items.c).where(*conditions).order_by(items.c.item).limit(limit)
+        rows = [dict(row) for row in self.db.execute(query).mappings().all()]
+        filters = {
+            "item": item,
+            "descripcion": descripcion,
+            "itemtype": itemtype,
+            "familia_cod": familia_cod,
+            "limit": limit,
+        }
+        return {
+            "meta": {
+                "endpoint": "/api/v1/items",
+                "source": f"{self.settings.items_master_schema}.{self.settings.items_master_table}",
+                "filters_applied": {
+                    key: value for key, value in filters.items() if value is not None
+                },
+                "records_returned": len(rows),
+            },
+            "data": rows,
+        }
+
+    def get_stores(
+        self,
+        *,
+        location: int | None = None,
+        descripcion: str | None = None,
+        tipo_centro: str | None = None,
+        region: str | None = None,
+        estado: int | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        stores = lacteos_maestro_tiendas
+        conditions: list[Any] = []
+        if location is not None:
+            conditions.append(stores.c.location == location)
+        if descripcion is not None:
+            conditions.append(stores.c.descripcion.ilike(f"%{descripcion}%"))
+        if tipo_centro is not None:
+            conditions.append(stores.c.tipo_centro == tipo_centro)
+        if region is not None:
+            conditions.append(stores.c.region == region)
+        if estado is not None:
+            conditions.append(stores.c.estado == estado)
+
+        query = select(*stores.c).where(*conditions).order_by(stores.c.location).limit(limit)
+        rows = [dict(row) for row in self.db.execute(query).mappings().all()]
+        filters = {
+            "location": location,
+            "descripcion": descripcion,
+            "tipo_centro": tipo_centro,
+            "region": region,
+            "estado": estado,
+            "limit": limit,
+        }
+        return {
+            "meta": {
+                "endpoint": "/api/v1/stores",
+                "source": (
+                    f"{self.settings.stores_master_schema}.{self.settings.stores_master_table}"
+                ),
+                "filters_applied": {
+                    key: value for key, value in filters.items() if value is not None
+                },
+                "records_returned": len(rows),
+            },
+            "data": rows,
+        }
+
+    def get_inventory(
+        self,
+        *,
+        item_code: str | None = None,
+        location_code: str | None = None,
+        proveedor_code: str | None = None,
+        estado_articulo: str | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        inventory = g2_maestro_inventario_lacteos
+        conditions: list[Any] = []
+        if item_code is not None:
+            conditions.append(inventory.c.item_code == item_code)
+        if location_code is not None:
+            conditions.append(inventory.c.location_code == location_code)
+        if proveedor_code is not None:
+            conditions.append(inventory.c.proveedor_code == proveedor_code)
+        if estado_articulo is not None:
+            conditions.append(inventory.c.estado_articulo == estado_articulo)
+
+        query = (
+            select(*inventory.c)
+            .where(*conditions)
+            .order_by(inventory.c.item_code, inventory.c.location_code)
+            .limit(limit)
+        )
+        rows = [dict(row) for row in self.db.execute(query).mappings().all()]
+        filters = {
+            "item_code": item_code,
+            "location_code": location_code,
+            "proveedor_code": proveedor_code,
+            "estado_articulo": estado_articulo,
+            "limit": limit,
+        }
+        return {
+            "meta": {
+                "endpoint": "/api/v1/inventory",
+                "source": (
+                    f"{self.settings.inventory_master_schema}."
+                    f"{self.settings.inventory_master_table}"
+                ),
+                "filters_applied": {
+                    key: value for key, value in filters.items() if value is not None
+                },
+                "records_returned": len(rows),
+            },
+            "data": rows,
+        }
+
+    def get_promotions(
+        self,
+        *,
+        item: str | None = None,
+        event_code: str | None = None,
+        status: str | None = None,
+        active_on: date | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        promotions = g2_lacteos_promociones_vigentes
+        conditions: list[Any] = []
+        if item is not None:
+            conditions.append(promotions.c.item == item)
+        if event_code is not None:
+            conditions.append(promotions.c.event_code == event_code)
+        if status is not None:
+            conditions.append(promotions.c.status == status)
+        if active_on is not None:
+            conditions.extend(
+                [promotions.c.inicio <= active_on, promotions.c.fin >= active_on]
+            )
+
+        query = (
+            select(*promotions.c)
+            .where(*conditions)
+            .order_by(promotions.c.inicio.desc(), promotions.c.item)
+            .limit(limit)
+        )
+        rows = [dict(row) for row in self.db.execute(query).mappings().all()]
+        filters = {
+            "item": item,
+            "event_code": event_code,
+            "status": status,
+            "active_on": active_on,
+            "limit": limit,
+        }
+        return {
+            "meta": {
+                "endpoint": "/api/v1/promotions",
+                "source": (
+                    f"{self.settings.current_promotions_schema}."
+                    f"{self.settings.current_promotions_table}"
+                ),
+                "filters_applied": {
+                    key: value for key, value in filters.items() if value is not None
+                },
+                "records_returned": len(rows),
+            },
+            "data": rows,
+        }
 
     def get_sales(
         self,

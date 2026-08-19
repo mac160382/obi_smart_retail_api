@@ -73,7 +73,7 @@ def business_question_match(question: str) -> tuple[str, list[str]] | None:
 
     scored: list[tuple[int, int, dict[str, Any]]] = []
     for entry in business_questions():
-        keywords = [normalize_text(str(term)) for term in entry.get("keywords", [])]
+        keywords = {normalize_text(str(term)) for term in entry.get("keywords", [])}
         score = sum(1 for keyword in keywords if keyword and keyword in text)
         if score:
             scored.append((score, len(keywords), entry))

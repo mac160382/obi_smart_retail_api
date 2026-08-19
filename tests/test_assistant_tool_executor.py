@@ -23,6 +23,40 @@ class FakeRepository:
             "data": [{"item": "A", "location": 13, "forecast_qty_vendida": 8.5}],
         }
 
+    def get_items(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {"source": "public.lacteos_maestro_items", "records_returned": 1},
+            "data": [{"item": "A", "descripcion": "Leche"}],
+        }
+
+    def get_stores(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {"source": "public.lacteos_maestro_tiendas", "records_returned": 1},
+            "data": [{"location": 13, "descripcion": "Centro"}],
+        }
+
+    def get_inventory(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {
+                "source": "public.g2_maestro_inventario_lacteos",
+                "records_returned": 1,
+            },
+            "data": [{"item_code": "A", "location_code": "13"}],
+        }
+
+    def get_promotions(self, **kwargs: Any) -> dict[str, Any]:
+        self.arguments = kwargs
+        return {
+            "meta": {
+                "source": "public.g2_lacteos_promociones_vigentes",
+                "records_returned": 1,
+            },
+            "data": [{"item": "A", "event_code": "PROMO-1"}],
+        }
+
     def get_sales(self, **kwargs: Any) -> dict[str, Any]:
         self.arguments = kwargs
         return {
@@ -49,7 +83,8 @@ class FakeRepository:
 def assistant_settings(**overrides: Any) -> Settings:
     values: dict[str, Any] = {
         "assistant_enabled_tools": (
-            "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_ventas"
+            "consultar_pedidos_sugeridos,consultar_pronosticos,consultar_articulos,"
+            "consultar_tiendas,consultar_ventas,consultar_inventario,consultar_promociones"
         ),
         "assistant_max_records": 25,
     }
@@ -172,3 +207,49 @@ def test_executor_rejects_inverted_sales_date_range() -> None:
             "consultar_ventas",
             {"date_from": "2026-08-08", "date_to": "2026-08-01"},
         )
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments", "expected"),
+    [
+        (
+            "consultar_articulos",
+            {"item": "A", "itemtype": "1", "familia_cod": "10"},
+            {"item": "A", "itemtype": 1, "familia_cod": 10, "limit": 7},
+        ),
+        (
+            "consultar_tiendas",
+            {"location": "13", "region": "Norte", "estado": "1"},
+            {"location": 13, "region": "Norte", "estado": 1, "limit": 7},
+        ),
+        (
+            "consultar_inventario",
+            {"item_code": "A", "location_code": "13", "proveedor_code": "P1"},
+            {
+                "item_code": "A",
+                "location_code": "13",
+                "proveedor_code": "P1",
+                "limit": 7,
+            },
+        ),
+        (
+            "consultar_promociones",
+            {"item": "A", "active_on": "2026-08-18"},
+            {"item": "A", "active_on": date(2026, 8, 18), "limit": 7},
+        ),
+    ],
+)
+def test_executor_normalizes_stage_6_tools(
+    tool: str,
+    arguments: dict[str, Any],
+    expected: dict[str, Any],
+) -> None:
+    repository = FakeRepository()
+    executor = ToolExecutor(repository, assistant_settings(assistant_max_records=7))
+
+    payload, trace = executor.execute(tool, arguments)
+
+    assert repository.arguments == expected
+    assert trace.tool == tool
+    assert trace.records_returned == 1
+    assert payload["data"]

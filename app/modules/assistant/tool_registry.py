@@ -19,19 +19,35 @@ PLANNED_TOOL_NAMES = frozenset(
     }
 )
 IMPLEMENTED_TOOL_NAMES = frozenset(
-    {"consultar_pedidos_sugeridos", "consultar_pronosticos", "consultar_ventas"}
+    {
+        "consultar_pedidos_sugeridos",
+        "consultar_pronosticos",
+        "consultar_articulos",
+        "consultar_tiendas",
+        "consultar_ventas",
+        "consultar_inventario",
+        "consultar_promociones",
+    }
 )
 
 DEFAULT_ARGUMENTS: dict[str, dict[str, Any]] = {
     "consultar_pronosticos": {"limit": 5},
     "consultar_pedidos_sugeridos": {"status": "Estimado", "limit": 5},
+    "consultar_articulos": {"limit": 10},
+    "consultar_tiendas": {"limit": 10},
     "consultar_ventas": {"aggregation": "day", "limit": 10},
+    "consultar_inventario": {"limit": 10},
+    "consultar_promociones": {"limit": 10},
 }
 
 TOOL_ENDPOINTS = {
     "consultar_pronosticos": "/api/v1/forecasts",
     "consultar_pedidos_sugeridos": "/api/v1/suggested-orders",
+    "consultar_articulos": "/api/v1/items",
+    "consultar_tiendas": "/api/v1/stores",
     "consultar_ventas": "/api/v1/sales",
+    "consultar_inventario": "/api/v1/inventory",
+    "consultar_promociones": "/api/v1/promotions",
 }
 
 TOOL_DESCRIPTIONS = {
@@ -41,7 +57,11 @@ TOOL_DESCRIPTIONS = {
     "consultar_pedidos_sugeridos": (
         "Consulta pedidos sugeridos, existencias, tránsito, proveedor, cantidad y estado."
     ),
+    "consultar_articulos": "Consulta el maestro de artículos.",
+    "consultar_tiendas": "Consulta el maestro de tiendas.",
     "consultar_ventas": ("Consulta ventas observadas con detalle o agregación diaria o semanal."),
+    "consultar_inventario": "Consulta existencias, tránsito y atributos de inventario.",
+    "consultar_promociones": "Consulta promociones vigentes y la variación esperada.",
 }
 
 
@@ -91,6 +111,29 @@ TOOL_PARAMETERS: dict[str, dict[str, Any]] = {
         },
         "additionalProperties": False,
     },
+    "consultar_articulos": {
+        "type": "object",
+        "properties": {
+            "item": _nullable("string", "Código del artículo."),
+            "descripcion": _nullable("string", "Texto de la descripción."),
+            "itemtype": _nullable("integer", "Tipo de artículo."),
+            "familia_cod": _nullable("integer", "Código de familia."),
+            "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
+        },
+        "additionalProperties": False,
+    },
+    "consultar_tiendas": {
+        "type": "object",
+        "properties": {
+            "location": _nullable("integer", "Código de tienda."),
+            "descripcion": _nullable("string", "Texto de la descripción."),
+            "tipo_centro": _nullable("string", "Tipo de centro."),
+            "region": _nullable("string", "Región."),
+            "estado": _nullable("integer", "Estado de la tienda."),
+            "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
+        },
+        "additionalProperties": False,
+    },
     "consultar_ventas": {
         "type": "object",
         "properties": {
@@ -103,6 +146,28 @@ TOOL_PARAMETERS: dict[str, dict[str, Any]] = {
                 "Nivel de detalle: detail, day o week.",
                 enum=["detail", "day", "week", None],
             ),
+            "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
+        },
+        "additionalProperties": False,
+    },
+    "consultar_inventario": {
+        "type": "object",
+        "properties": {
+            "item_code": _nullable("string", "Código del artículo en inventario."),
+            "location_code": _nullable("string", "Código de tienda en inventario."),
+            "proveedor_code": _nullable("string", "Código de proveedor."),
+            "estado_articulo": _nullable("string", "Estado del artículo."),
+            "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
+        },
+        "additionalProperties": False,
+    },
+    "consultar_promociones": {
+        "type": "object",
+        "properties": {
+            "item": _nullable("string", "Código del artículo."),
+            "event_code": _nullable("string", "Código del acontecimiento promocional."),
+            "status": _nullable("string", "Estado de la promoción."),
+            "active_on": _nullable("string", "Fecha YYYY-MM-DD dentro de la promoción."),
             "limit": _nullable("integer", "Cantidad máxima de registros.", minimum=1, maximum=25),
         },
         "additionalProperties": False,
