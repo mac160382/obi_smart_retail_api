@@ -659,6 +659,18 @@ manifiesto y los archivos de resultados ubicados en `ASSISTANT_EXECUTION_DIR`.
 Las métricas y explicaciones leen exclusivamente CSV previamente calculados desde
 `ASSISTANT_ARTIFACT_DIR`; estas herramientas no entrenan ni recalculan modelos.
 
+En ejecución local, las rutas anteriores pueden apuntar a directorios Windows.
+Docker Compose las reemplaza por `/app/resources/artifacts` y
+`/app/resources/executions`, montando las carpetas locales como volúmenes de solo
+lectura. Así se pueden actualizar los CSV y archivos de resultados sin reconstruir
+la imagen:
+
+```bash
+docker compose up -d --build api
+docker compose exec api ls -la /app/resources/artifacts
+docker compose exec api ls -la /app/resources/executions
+```
+
 Puntos de acceso:
 
 ```text

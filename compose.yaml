@@ -42,8 +42,13 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://smartadmin:change-me@db:5432/smart_retail
       RABBITMQ_HOST: rabbitmq
+      ASSISTANT_ARTIFACT_DIR: /app/resources/artifacts
+      ASSISTANT_EXECUTION_DIR: /app/resources/executions
     ports:
       - "8000:8000"
+    volumes:
+      - ./resources/artifacts:/app/resources/artifacts:ro
+      - ./resources/executions:/app/resources/executions:ro
     depends_on:
       db:
         condition: service_healthy
