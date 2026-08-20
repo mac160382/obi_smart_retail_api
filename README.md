@@ -498,8 +498,9 @@ curl "http://localhost:8000/api/v1/suggested-orders?location=13&forecast_origin=
 
 `location` es obligatorio. La consulta devuelve solamente registros con
 `horizon_day = 1`; este filtro se aplica también al total paginado. `page` inicia
-en `1` y `page_size` admite valores de `1` a `200`. Los resultados se ordenan por
-`item` y `descripcion_tienda`:
+en `1` y `page_size` admite valores de `1` a `200`. Los resultados con
+`sugerido > 0` aparecen primero y, dentro de cada grupo, se ordenan por `item`
+y `descripcion_tienda`:
 
 ```json
 {
@@ -566,7 +567,8 @@ usuario y la fecha, y guarda el antes y despues en
 se repite dentro del batch, ninguna modificacion del batch se confirma.
 
 Un registro aprobado no se puede modificar nuevamente. La respuesta incluye
-el `batch_id`, conteos y los registros actualizados.
+el `batch_id`, conteos y los registros actualizados. `observaciones` es
+opcional; puede omitirse o enviarse como `null`.
 
 ## Consultar historial de aprobaciones
 

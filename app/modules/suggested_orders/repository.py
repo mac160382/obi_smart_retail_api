@@ -57,7 +57,7 @@ class SuggestedOrderAlreadyApprovedError(Exception):
 class SuggestedOrderUpdateCommand:
     key: SuggestedOrderKey
     ajustado: float
-    observaciones: str
+    observaciones: str | None
 
 
 @dataclass(frozen=True)
@@ -216,6 +216,7 @@ def build_suggested_orders_page_query(
     page_rows = (
         select(*filtered_orders.c)
         .order_by(
+            (filtered_orders.c.sugerido > 0).desc(),
             filtered_orders.c.item,
             filtered_orders.c.descripcion_tienda,
         )
@@ -232,7 +233,11 @@ def build_suggested_orders_page_query(
     return (
         select(totals.c.total_items, *page_rows.c)
         .select_from(totals.outerjoin(page_rows, true()))
-        .order_by(page_rows.c.item, page_rows.c.descripcion_tienda)
+        .order_by(
+            (page_rows.c.sugerido > 0).desc(),
+            page_rows.c.item,
+            page_rows.c.descripcion_tienda,
+        )
     )
 
 

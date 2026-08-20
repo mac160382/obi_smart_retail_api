@@ -57,7 +57,11 @@ class SuggestedOrderBatchUpdateItem(BaseModel):
     location: int
     forecast_origin: date
     ajustado: float = Field(allow_inf_nan=False)
-    observaciones: str = Field(min_length=1, max_length=5000)
+    observaciones: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=5000,
+    )
 
 
 class SuggestedOrderBatchUpdateRequest(BaseModel):
@@ -100,7 +104,7 @@ class SuggestedOrderHistoryItem(BaseModel):
     ajustado_anterior: float | None
     ajustado_nuevo: float
     observaciones_anteriores: str | None
-    observaciones_nuevas: str
+    observaciones_nuevas: str | None
     status_anterior: Literal["Estimado", "Planificado", "Aprobado"]
     status_nuevo: Literal["Aprobado"]
     modified_by: UUID

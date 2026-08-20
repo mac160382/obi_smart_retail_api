@@ -292,7 +292,7 @@ pedido_sugerido_historial = Table(
     Column("ajustado_anterior", DOUBLE_PRECISION, nullable=True),
     Column("ajustado_nuevo", DOUBLE_PRECISION, nullable=False),
     Column("observaciones_anteriores", Text, nullable=True),
-    Column("observaciones_nuevas", Text, nullable=False),
+    Column("observaciones_nuevas", Text, nullable=True),
     Column("status_anterior", String(20), nullable=False),
     Column("status_nuevo", String(20), nullable=False),
     Column("modified_by", PGUUID(as_uuid=True), nullable=False),

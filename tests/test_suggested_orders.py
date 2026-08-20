@@ -51,6 +51,7 @@ def test_approval_columns_and_logical_unique_key_are_defined() -> None:
     }
     assert "batch_id" in pedido_sugerido_historial.c
     assert "modified_by" in pedido_sugerido_historial.c
+    assert pedido_sugerido_historial.c.observaciones_nuevas.nullable is True
 
 
 def test_batch_and_history_routes_require_oauth2() -> None:
@@ -114,7 +115,8 @@ def test_page_query_filters_orders_and_applies_pagination() -> None:
     assert "WITH filtered_orders AS" in sql
     assert "public.pedido_sugerido.location = 13" in sql
     assert "public.pedido_sugerido.horizon_day = 1" in sql
-    assert "ORDER BY filtered_orders.item" in sql
+    assert "ORDER BY filtered_orders.sugerido > 0 DESC" in sql
+    assert "DESC, filtered_orders.item" in sql
     assert "LIMIT 25 OFFSET 25" in sql
 
 
@@ -263,6 +265,23 @@ def test_batch_schema_rejects_duplicate_logical_keys() -> None:
         SuggestedOrderBatchUpdateRequest.model_validate(
             {"items": [item, item]}
         )
+
+
+def test_batch_schema_accepts_missing_observations() -> None:
+    request = SuggestedOrderBatchUpdateRequest.model_validate(
+        {
+            "items": [
+                {
+                    "item": "ITEM-1",
+                    "location": 13,
+                    "forecast_origin": "2026-08-16",
+                    "ajustado": 25.5,
+                }
+            ]
+        }
+    )
+
+    assert request.items[0].observaciones is None
 
 
 def test_repository_returns_page_and_total_from_one_query() -> None:
