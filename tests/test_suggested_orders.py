@@ -76,38 +76,56 @@ def test_batch_and_history_routes_require_oauth2() -> None:
     ]
 
 
-def test_insert_statement_uses_ctes_and_qualified_tables() -> None:
+def test_recalculate_requires_forecast_origin_query_parameter() -> None:
+    operation = create_app().openapi()["paths"][
+        "/api/v1/suggested-orders/recalculate"
+    ]["post"]
+    forecast_parameter = next(
+        parameter
+        for parameter in operation["parameters"]
+        if parameter["name"] == "forecast_origin"
+    )
+
+    assert forecast_parameter["in"] == "query"
+    assert forecast_parameter["required"] is True
+    assert forecast_parameter["schema"]["format"] == "date"
+
+
+def test_insert_statement_filters_forecast_and_calculates_stock_levels() -> None:
     sql = str(
-        build_suggested_orders_insert().compile(
+        build_suggested_orders_insert(date(2026, 6, 24)).compile(
             dialect=postgresql.dialect(),
             compile_kwargs={"literal_binds": True},
         )
     )
 
-    assert "WITH ultima_fecha AS" in sql
-    assert "max(public.pronostico.forecast_origin)" in sql
+    assert "WITH ultima_fecha AS" not in sql
     assert "INSERT INTO public.pedido_sugerido" in sql
     assert "item, location, descripcion_tienda, descripcion_item" in sql
-    assert "status, forecast_origin, horizon_day, target_date" in sql
+    assert (
+        "status, forecast_origin, horizon_day, target_date, "
+        "max_qty_vendida, safety_stock, reorder_point"
+    ) in sql
     assert "FROM public.g2_maestro_inventario_lacteos" in sql
     assert "LEFT OUTER JOIN public.pronostico" in sql
     assert "LEFT OUTER JOIN public.vst_promociones_vigentes" in sql
-    assert "JOIN ultima_fecha ON true" in sql
+    assert "LEFT OUTER JOIN public.vst_max_vta_historica" in sql
+    assert "public.vst_max_vta_historica.location = CAST(" in sql
     assert "coalesce(public.pronostico.forecast_qty_vendida, 0)" in sql
     assert (
-        "1 - coalesce(public.vst_promociones_vigentes.uplift_esperado, 0)"
+        "1 + coalesce(public.vst_promociones_vigentes.uplift_esperado, 0)"
         in sql
     )
-    assert "- coalesce(public.g2_maestro_inventario_lacteos." in sql
-    assert "coalesce(public.pronostico.forecast_origin, ultima_fecha.forecast_origin)" in sql
+    assert "+ coalesce(public.g2_maestro_inventario_lacteos." in sql
     assert "coalesce(public.pronostico.horizon_day, 1)" in sql
-    assert "coalesce(public.pronostico.target_date, ultima_fecha.forecast_origin)" in sql
+    assert "public.pronostico.forecast_origin = '2026-06-24'" in sql
+    assert "max_qty_vendida" in sql
     assert "LATERAL" not in sql
     assert "ceil(" in sql
     assert "description_item_code" in sql
     assert "description_proveedor" in sql
     assert "'Estimado'" in sql
-    assert "WHERE NOT (EXISTS" in sql
+    assert "AND NOT (EXISTS" in sql
     assert "approved_orders.status = 'Aprobado'" in sql
 
 
@@ -156,7 +174,9 @@ def test_repository_replaces_rows_after_acquiring_lock() -> None:
     inserted_result = MagicMock(rowcount=8)
     db.execute.side_effect = [deleted_result, inserted_result]
 
-    counts = SuggestedOrderRepository(db).replace_suggested_orders()
+    counts = SuggestedOrderRepository(db).replace_suggested_orders(
+        date(2026, 6, 24)
+    )
 
     assert counts == ReplacementCounts(deleted_rows=4, inserted_rows=8)
     assert db.scalar.call_count == 1
@@ -168,6 +188,13 @@ def test_repository_replaces_rows_after_acquiring_lock() -> None:
         )
     )
     assert "public.pedido_sugerido.status != 'Aprobado'" in delete_sql
+    insert_sql = str(
+        db.execute.call_args_list[1].args[0].compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "public.pronostico.forecast_origin = '2026-06-24'" in insert_sql
 
 
 def test_repository_rejects_concurrent_calculation() -> None:
@@ -175,7 +202,9 @@ def test_repository_rejects_concurrent_calculation() -> None:
     db.scalar.return_value = False
 
     with pytest.raises(SuggestedOrderCalculationInProgressError):
-        SuggestedOrderRepository(db).replace_suggested_orders()
+        SuggestedOrderRepository(db).replace_suggested_orders(
+            date(2026, 6, 24)
+        )
 
     db.execute.assert_not_called()
 
@@ -345,13 +374,21 @@ def test_service_commits_successful_replacement() -> None:
         inserted_rows=8,
     )
 
-    result = service.recalculate(uuid4())
+    forecast_origin = date(2026, 6, 24)
+    result = service.recalculate(
+        uuid4(),
+        forecast_origin=forecast_origin,
+    )
 
     assert result.destination == "public.pedido_sugerido"
+    assert result.forecast_origin == forecast_origin
     assert result.deleted_rows == 4
     assert result.inserted_rows == 8
     db.commit.assert_called_once()
     db.rollback.assert_not_called()
+    service.repository.replace_suggested_orders.assert_called_once_with(
+        forecast_origin
+    )
 
 
 def test_service_commits_successful_batch_approval() -> None:
@@ -437,6 +474,9 @@ def test_service_persists_forecast_notification_in_recalculation_transaction() -
     assert payload["forecast_event_id"] == str(source_event_id)
     assert payload["forecast_origin"] == "2026-08-11"
     assert payload["correlation_id"] == "forecast-import-123"
+    service.repository.replace_suggested_orders.assert_called_once_with(
+        date(2026, 8, 11)
+    )
 
 
 def test_service_does_not_recalculate_an_already_processed_forecast_event() -> None:
@@ -450,6 +490,7 @@ def test_service_does_not_recalculate_an_already_processed_forecast_event() -> N
         event_type="suggested-orders.recalculated",
         payload={
             "destination": "public.pedido_sugerido",
+            "forecast_origin": "2026-08-11",
             "deleted_rows": 4,
             "inserted_rows": 8,
             "calculated_at": "2026-08-11T12:00:00+00:00",
@@ -466,6 +507,7 @@ def test_service_does_not_recalculate_an_already_processed_forecast_event() -> N
         )
         result = service.recalculate(
             source_event_id,
+            forecast_origin=date(2026, 8, 11),
             source_event_id=source_event_id,
         )
 
@@ -481,7 +523,10 @@ def test_service_rolls_back_failed_replacement() -> None:
     service.repository.replace_suggested_orders.side_effect = RuntimeError
 
     with pytest.raises(RuntimeError):
-        service.recalculate(uuid4())
+        service.recalculate(
+            uuid4(),
+            forecast_origin=date(2026, 6, 24),
+        )
 
     db.commit.assert_not_called()
     db.rollback.assert_called_once()

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class SuggestedOrderCalculationResponse(BaseModel):
     operation: Literal["replace"]
     destination: str
+    forecast_origin: date
     status: Literal["completed"]
     deleted_rows: int
     inserted_rows: int

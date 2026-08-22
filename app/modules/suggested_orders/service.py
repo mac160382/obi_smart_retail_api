@@ -30,6 +30,7 @@ class InvalidLocationCodeError(Exception):
 @dataclass(frozen=True)
 class SuggestedOrderCalculationResult:
     destination: str
+    forecast_origin: date
     deleted_rows: int
     inserted_rows: int
     calculated_at: datetime
@@ -67,9 +68,9 @@ class SuggestedOrderService:
         self,
         user_id: UUID,
         *,
+        forecast_origin: date,
         source_event_id: UUID | None = None,
         correlation_id: str | None = None,
-        forecast_origin: date | None = None,
     ) -> SuggestedOrderCalculationResult:
         started_at = perf_counter()
         event_repository = SuggestedOrderEventRepository(self.db)
@@ -80,6 +81,9 @@ class SuggestedOrderService:
                 payload = existing.payload
                 return SuggestedOrderCalculationResult(
                     destination=str(payload["destination"]),
+                    forecast_origin=date.fromisoformat(
+                        str(payload["forecast_origin"])
+                    ),
                     deleted_rows=int(payload["deleted_rows"]),
                     inserted_rows=int(payload["inserted_rows"]),
                     calculated_at=datetime.fromisoformat(
@@ -90,7 +94,9 @@ class SuggestedOrderService:
                 )
 
         try:
-            counts = self.repository.replace_suggested_orders()
+            counts = self.repository.replace_suggested_orders(
+                forecast_origin
+            )
             calculated_at = datetime.now(UTC)
             duration_ms = round((perf_counter() - started_at) * 1000)
             destination = (
@@ -106,11 +112,7 @@ class SuggestedOrderService:
                         "status": "completed",
                         "source_event": "forecast.loaded",
                         "forecast_event_id": str(source_event_id),
-                        "forecast_origin": (
-                            forecast_origin.isoformat()
-                            if forecast_origin is not None
-                            else None
-                        ),
+                        "forecast_origin": forecast_origin.isoformat(),
                         "correlation_id": correlation_id,
                         "destination": destination,
                         "deleted_rows": counts.deleted_rows,
@@ -133,6 +135,7 @@ class SuggestedOrderService:
             "Suggested orders calculated",
             extra={
                 "user_id": str(user_id),
+                "forecast_origin": forecast_origin.isoformat(),
                 "deleted_rows": counts.deleted_rows,
                 "inserted_rows": counts.inserted_rows,
                 "duration_ms": duration_ms,
@@ -140,6 +143,7 @@ class SuggestedOrderService:
         )
         return SuggestedOrderCalculationResult(
             destination=destination,
+            forecast_origin=forecast_origin,
             deleted_rows=counts.deleted_rows,
             inserted_rows=counts.inserted_rows,
             calculated_at=calculated_at,

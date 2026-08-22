@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 from aio_pika import DeliveryMode
@@ -10,6 +10,7 @@ from aio_pika import DeliveryMode
 from app.infrastructure.messaging import forecast_consumer as consumer_module
 from app.infrastructure.messaging.forecast_consumer import (
     FORECAST_LOADED_EVENT,
+    ForecastLoadedEvent,
     RabbitMQForecastLoadedConsumer,
 )
 from app.modules.suggested_orders.repository import (
@@ -108,6 +109,34 @@ def test_consumer_acknowledges_only_after_success() -> None:
     message.ack.assert_awaited_once_with()
     message.nack.assert_not_awaited()
     message.reject.assert_not_awaited()
+
+
+def test_consumer_passes_forecast_origin_to_recalculation() -> None:
+    consumer = make_consumer()
+    session = MagicMock()
+    consumer.session_factory = MagicMock(return_value=session)
+    expected = SimpleNamespace(
+        notification=None,
+        inserted_rows=8,
+        deleted_rows=4,
+        duration_ms=25,
+    )
+    message = make_message()
+    event = ForecastLoadedEvent.from_message(message)
+
+    with patch(
+        "app.infrastructure.messaging.forecast_consumer.SuggestedOrderService"
+    ) as service_class:
+        service_class.return_value.recalculate.return_value = expected
+        result = consumer._recalculate(event)
+
+    assert result is expected
+    service_class.return_value.recalculate.assert_called_once_with(
+        event.event_id,
+        source_event_id=event.event_id,
+        correlation_id=event.correlation_id,
+        forecast_origin=date(2026, 8, 11),
+    )
 
 
 def test_consumer_rejects_invalid_or_non_persistent_event() -> None:

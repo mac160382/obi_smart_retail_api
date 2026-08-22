@@ -176,6 +176,9 @@ propio API. El mensaje se confirma manualmente solamente despues del commit del
 recalculo. Un evento invalido se rechaza, una ejecucion concurrente se reencola
 y un error inesperado se reintenta una vez.
 
+El consumidor toma `data.forecast_origin`, lo convierte a `date` y lo pasa al
+repositorio como filtro del `INSERT` de `public.pedido_sugerido`.
+
 ### Eventos SSE de pedido sugerido
 
 Una vez confirmado el recÃ¡lculo originado por `forecast.loaded`, la API guarda
@@ -455,18 +458,32 @@ Este endpoint reemplaza de forma atómica los registros de
 `public.pedido_sugerido` con el resultado calculado en PostgreSQL:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/suggested-orders/recalculate \
+curl -X POST "http://localhost:8000/api/v1/suggested-orders/recalculate?forecast_origin=2026-06-24" \
   -H "Authorization: Bearer REEMPLAZAR_TOKEN"
 ```
 
-El procedimiento parte del inventario y relaciona el pronóstico mediante `item`
-y `location`. Cuando no existe un pronóstico coincidente, utiliza la fecha máxima
-de `forecast_origin`, asigna `1` a `horizon_day` y usa esa misma fecha como
-`target_date`. Las promociones se relacionan por artículo. La fórmula es:
+El parámetro obligatorio `forecast_origin` utiliza el formato `YYYY-MM-DD`. El
+procedimiento parte del inventario y relaciona el pronóstico mediante `item` y
+`location`, pero inserta solamente los pronósticos cuya fecha de origen coincide
+con el parámetro. Las promociones se relacionan por artículo y la venta histórica
+máxima mediante `item` y `location`.
+
+Las métricas de inventario se calculan así:
 
 ```text
-CEIL(prediccion * (1 - uplift_esperado) - minimum_handling_quantity_units
-     - current_stock_units - on_order_in_transit_units)
+safety_stock = CEIL(max_qty_vendida * lead_time_days
+                    - prediccion * lead_time_days)
+
+reorder_point = CEIL(lead_time_days * prediccion
+                     + max_qty_vendida * lead_time_days
+                     - prediccion * lead_time_days)
+
+sugerido = CEIL(prediccion * (1 + uplift_esperado)
+                + minimum_handling_quantity_units
+                - current_stock_units
+                - on_order_in_transit_units
+                + (max_qty_vendida * lead_time_days
+                   - prediccion * lead_time_days))
 ```
 
 Los valores de texto nulos se sustituyen por una cadena vacía y los valores
@@ -489,6 +506,7 @@ Una respuesta exitosa utiliza `200 OK`:
 {
   "operation": "replace",
   "destination": "public.pedido_sugerido",
+  "forecast_origin": "2026-06-24",
   "status": "completed",
   "deleted_rows": 0,
   "inserted_rows": 64562,

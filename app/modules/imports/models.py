@@ -233,6 +233,15 @@ vst_promociones_vigentes = Table(
     schema=settings.current_promotions_view_schema,
 )
 
+vst_max_vta_historica = Table(
+    "vst_max_vta_historica",
+    business_metadata,
+    Column("item", String(50), nullable=True),
+    Column("location", Integer, nullable=True),
+    Column("max_qty_vendida", Numeric(14, 2), nullable=True),
+    schema=settings.database_schema,
+)
+
 pedido_sugerido = Table(
     settings.suggested_orders_table,
     business_metadata,

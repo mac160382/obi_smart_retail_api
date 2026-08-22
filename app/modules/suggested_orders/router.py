@@ -302,9 +302,16 @@ def get_suggested_orders(
 def recalculate_suggested_orders(
     user_id: CurrentUserId,
     db: DatabaseSession,
+    forecast_origin: Annotated[
+        date,
+        Query(description="Fecha de origen del pronostico que se desea calcular"),
+    ],
 ) -> SuggestedOrderCalculationResponse:
     try:
-        result = SuggestedOrderService(db).recalculate(user_id)
+        result = SuggestedOrderService(db).recalculate(
+            user_id,
+            forecast_origin=forecast_origin,
+        )
     except SuggestedOrderCalculationInProgressError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -328,6 +335,7 @@ def recalculate_suggested_orders(
     return SuggestedOrderCalculationResponse(
         operation="replace",
         destination=result.destination,
+        forecast_origin=result.forecast_origin,
         status="completed",
         deleted_rows=result.deleted_rows,
         inserted_rows=result.inserted_rows,

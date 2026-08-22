@@ -23,6 +23,7 @@ from app.modules.imports.models import (
     pedido_sugerido,
     pedido_sugerido_historial,
     pronostico,
+    vst_max_vta_historica,
     vst_promociones_vigentes,
 )
 
@@ -85,14 +86,7 @@ class SuggestedOrderHistoryPageData:
     items: list[dict[str, object]]
 
 
-def build_suggested_orders_insert() -> Insert:
-    latest_forecast_date = (
-        select(
-            func.max(pronostico.c.forecast_origin).label("forecast_origin")
-        )
-        .cte("ultima_fecha")
-    )
-
+def build_suggested_orders_insert(forecast_origin: date) -> Insert:
     inventory = g2_maestro_inventario_lacteos
     approved_orders = pedido_sugerido.alias("approved_orders")
     location = cast(inventory.c.location_code, Integer)
@@ -106,18 +100,29 @@ def build_suggested_orders_insert() -> Insert:
     )
     current_stock = func.coalesce(inventory.c.current_stock_units, 0)
     in_transit = func.coalesce(inventory.c.on_order_in_transit_units, 0)
-    suggested = func.coalesce(
+    maximum_historical_sale = func.coalesce(
+        vst_max_vta_historica.c.max_qty_vendida,
+        0,
+    )
+    safety_stock_calculation = (
+        maximum_historical_sale * lead_time
+    ) - (prediction * lead_time)
+    safety_stock = func.coalesce(func.ceil(safety_stock_calculation), 0)
+    reorder_point = func.coalesce(
         func.ceil(
-            (prediction * (literal(1) - uplift) * literal(1))
-            - minimum_quantity
-            - current_stock
-            - in_transit
+            (lead_time * prediction) + safety_stock_calculation
         ),
         0,
     )
-    forecast_origin = func.coalesce(
-        pronostico.c.forecast_origin,
-        latest_forecast_date.c.forecast_origin,
+    suggested = func.coalesce(
+        func.ceil(
+            (prediction * (literal(1) + uplift) * literal(1))
+            + minimum_quantity
+            - current_stock
+            - in_transit
+            + safety_stock_calculation
+        ),
+        0,
     )
     horizon_day = func.coalesce(pronostico.c.horizon_day, 1)
     approved_order_exists = (
@@ -126,7 +131,8 @@ def build_suggested_orders_insert() -> Insert:
         .where(
             approved_orders.c.item == inventory.c.item_code,
             approved_orders.c.location == location,
-            approved_orders.c.forecast_origin == forecast_origin,
+            approved_orders.c.forecast_origin
+            == pronostico.c.forecast_origin,
             approved_orders.c.horizon_day == horizon_day,
             approved_orders.c.status == "Aprobado",
         )
@@ -148,12 +154,12 @@ def build_suggested_orders_insert() -> Insert:
         in_transit,
         suggested,
         literal("Estimado", type_=pedido_sugerido.c.status.type),
-        forecast_origin,
+        pronostico.c.forecast_origin,
         horizon_day,
-        func.coalesce(
-            pronostico.c.target_date,
-            latest_forecast_date.c.forecast_origin,
-        ),
+        pronostico.c.target_date,
+        maximum_historical_sale,
+        safety_stock,
+        reorder_point,
     ).select_from(
         inventory.outerjoin(
             pronostico,
@@ -164,11 +170,17 @@ def build_suggested_orders_insert() -> Insert:
         ).outerjoin(
             vst_promociones_vigentes,
             vst_promociones_vigentes.c.item == inventory.c.item_code,
-        ).join(
-            latest_forecast_date,
-            true(),
+        ).outerjoin(
+            vst_max_vta_historica,
+            and_(
+                vst_max_vta_historica.c.item == inventory.c.item_code,
+                vst_max_vta_historica.c.location == location,
+            ),
         )
-    ).where(~approved_order_exists)
+    ).where(
+        pronostico.c.forecast_origin == forecast_origin,
+        ~approved_order_exists,
+    )
 
     return insert(pedido_sugerido).from_select(
         [
@@ -189,6 +201,9 @@ def build_suggested_orders_insert() -> Insert:
             "forecast_origin",
             "horizon_day",
             "target_date",
+            "max_qty_vendida",
+            "safety_stock",
+            "reorder_point",
         ],
         calculated_rows,
     )
@@ -252,7 +267,10 @@ class SuggestedOrderRepository:
         if not has_lock:
             raise SuggestedOrderCalculationInProgressError
 
-    def replace_suggested_orders(self) -> ReplacementCounts:
+    def replace_suggested_orders(
+        self,
+        forecast_origin: date,
+    ) -> ReplacementCounts:
         self._acquire_write_lock()
 
         deleted_result = self.db.execute(
@@ -260,7 +278,9 @@ class SuggestedOrderRepository:
                 pedido_sugerido.c.status != "Aprobado"
             )
         )
-        inserted_result = self.db.execute(build_suggested_orders_insert())
+        inserted_result = self.db.execute(
+            build_suggested_orders_insert(forecast_origin)
+        )
 
         return ReplacementCounts(
             deleted_rows=max(deleted_result.rowcount or 0, 0),
