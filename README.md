@@ -411,20 +411,36 @@ La carga reemplaza únicamente los registros de `public.pronostico`. No ejecuta
 el cálculo de pedidos sugeridos ni modifica `public.pedido_sugerido`; ese proceso
 permanece separado en `/api/v1/suggested-orders/recalculate`.
 
+## Vista de venta historica maxima
+
+Alembic crea `public.vst_max_vta_historica`, que devuelve una fila por
+combinacion de `item` y `location` con el valor maximo historico de
+`qty_vendida`:
+
+```sql
+SELECT item, location, max_qty_vendida
+FROM public.vst_max_vta_historica;
+```
+
+La vista consulta `public.lacteos_ventas_historicas` y pertenece al usuario
+`smartadmin`.
+
 ## Tabla de pedido sugerido
 
 Las migraciones crean `public.pedido_sugerido` con las siguientes columnas,
 todas obligatorias y sin llave primaria:
 
 ```text
-item,forecast_origin,horizon_day,target_date,location,descripcion_tienda,descripcion_item,descripcion_proveedor,prediccion,ajustado,observaciones,approved_by,approved_at,updated_at,lead_time_days,review_period_days,uplift_esperado,minimum_handling_quantity_units,current_stock_units,on_order_in_transit_units,sugerido,status
+item,forecast_origin,horizon_day,target_date,location,descripcion_tienda,descripcion_item,descripcion_proveedor,prediccion,ajustado,observaciones,approved_by,approved_at,updated_at,lead_time_days,review_period_days,uplift_esperado,minimum_handling_quantity_units,current_stock_units,on_order_in_transit_units,sugerido,max_qty_vendida,safety_stock,reorder_point,status
 ```
 
 `descripcion_item` utiliza `varchar(60)` y `descripcion_proveedor`, `varchar(67)`,
 de acuerdo con las longitudes de las columnas fuente. `prediccion` utiliza
 `double precision`; `ajustado` utiliza el mismo tipo y permite `NULL`;
-`uplift_esperado`, `numeric(18,4)`; y las cantidades, periodos y `sugerido`
-utilizan `integer`. `status` admite `Estimado`, `Planificado` y `Aprobado`, con
+`uplift_esperado`, `numeric(18,4)`; y las cantidades, periodos, `sugerido`,
+`max_qty_vendida`, `safety_stock` y `reorder_point` utilizan `integer`. Estas
+tres nuevas columnas tienen cero como valor predeterminado. `status` admite
+`Estimado`, `Planificado` y `Aprobado`, con
 `Estimado` como valor predeterminado. `forecast_origin` y `target_date` utilizan
 `date`, y `horizon_day`, `integer`; las tres columnas son obligatorias.
 
@@ -532,6 +548,9 @@ y `descripcion_tienda`:
       "current_stock_units": 10,
       "on_order_in_transit_units": 3,
       "sugerido": 22,
+      "max_qty_vendida": 0,
+      "safety_stock": 0,
+      "reorder_point": 0,
       "status": "Estimado"
     }
   ]

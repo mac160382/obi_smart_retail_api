@@ -255,6 +255,9 @@ pedido_sugerido = Table(
     Column("current_stock_units", Integer, nullable=False),
     Column("on_order_in_transit_units", Integer, nullable=False),
     Column("sugerido", Integer, nullable=False),
+    Column("max_qty_vendida", Integer, server_default="0", nullable=False),
+    Column("safety_stock", Integer, server_default="0", nullable=False),
+    Column("reorder_point", Integer, server_default="0", nullable=False),
     Column("descripcion_item", String(60), nullable=False),
     Column("descripcion_proveedor", String(67), nullable=False),
     Column(

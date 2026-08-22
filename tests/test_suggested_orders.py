@@ -36,6 +36,17 @@ def test_forecast_fields_are_required_in_suggested_orders() -> None:
     assert pedido_sugerido.c.target_date.nullable is False
 
 
+def test_stock_level_fields_are_required_and_default_to_zero() -> None:
+    for column_name in (
+        "max_qty_vendida",
+        "safety_stock",
+        "reorder_point",
+    ):
+        column = pedido_sugerido.c[column_name]
+        assert column.nullable is False
+        assert str(column.server_default.arg) == "0"
+
+
 def test_approval_columns_and_logical_unique_key_are_defined() -> None:
     assert "observaciones" in pedido_sugerido.c
     assert "approved_by" in pedido_sugerido.c
@@ -310,6 +321,9 @@ def test_repository_returns_page_and_total_from_one_query() -> None:
             "current_stock_units": 3,
             "on_order_in_transit_units": 1,
             "sugerido": 13,
+            "max_qty_vendida": 0,
+            "safety_stock": 0,
+            "reorder_point": 0,
             "status": "Estimado",
         }
     ]

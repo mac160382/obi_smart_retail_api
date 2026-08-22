@@ -37,6 +37,9 @@ class SuggestedOrderItem(BaseModel):
     current_stock_units: int
     on_order_in_transit_units: int
     sugerido: int
+    max_qty_vendida: int
+    safety_stock: int
+    reorder_point: int
     status: Literal["Estimado", "Planificado", "Aprobado"]
 
 
